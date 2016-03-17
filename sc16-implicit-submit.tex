@@ -70,7 +70,21 @@ The abstract goes here. We should say something clever and thought provoking.
 % creates the second title. It will be ignored for other modes.
 \IEEEpeerreviewmaketitle
 
-
+%===========================================================================
+\section*{Outline}
+\begin{itemize}
+\item Climate apps use HE-VI model 3D+1D. Also a pattern for 2D+1D and 3D+0D chemistry
+\item Results demonstrate importance of ``batching'' solves, MLK doesn't do
+\item Cache coherency is important: IMEX RK accum, tiling
+\item Explicit part is HO stencil op, memory b/w bound (w/ ghost cells)
+\item Implicit part is non-linear solver: App requires different matrix at each i,j index 
+\item Results in repeated vertical sparse banded solve
+\item Solve (tridiag, banded, dense) should vectorize on i (unit stride), tiled in pencils
+\item Considerations for vector alignment, tiling, and memory
+\item Performance results, scaling, comparison, by platform / parameter
+\item Future work: communication hiding, load imbalance, IMEX
+\end{itemize}
+% 
 
 %===========================================================================
 \section{Introduction}
