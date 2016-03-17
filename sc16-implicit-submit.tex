@@ -1,5 +1,12 @@
 \documentclass[conference]{IEEEtran}
 %===========================================================================
+\usepackage{color}
+\usepackage{comment}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{cite}
+\newcommand{\fix}[1]{{\bf \textcolor {red}{#1}}}
 %===========================================================================
 \begin{document}
 \title{Some Title Goes Here}
@@ -104,7 +111,7 @@ Optimizations
 
 %===========================================================================
 \section{Experimental Setup}
-Edison, Cori, etc...
+Edison~\cite{Edison_website}, Cori, etc...
 Compilers
 Problem Size
 
@@ -118,10 +125,19 @@ The conclusion goes here.
 
 %===========================================================================
 \section*{Acknowledgments}
-Comment this section out before submitting
+\fix{Comment this section out before submitting... Reformat before finalizing...}
+
+This research used resources in Lawrence Berkeley National Laboratory and the National Energy Research Scientific Computing Center, which are supported by the U.S. Department of Energy Office of Science's Advanced Scientific Computing Research program under contract number DE-AC02-05CH11231.  
+This material is based upon work supported by the U.S. Department of Energy, Office of Science, Advanced Scientific Computing Research, Scientific Discovery through Advanced Computing (SciDAC) program.
+%This research used resources of the National Energy Research Scientific Computing Center (NERSC), which is supported by the Office of Science of the U.S. Department of Energy under contract DE-AC02-05CH11231.
+%This research used resources of the Argonne Leadership Computing Facility at Argonne National Laboratory, which is supported by the Office of Science of the U.S. Department of Energy under contract DE-AC02-06CH11357.
+%This research used resources of the Oak Ridge Leadership Facility at the Oak Ridge National Laboratory, which is supported by the Office of Science of the U.S. Department of Energy under Contract No. DE-AC05-00OR22725.
+
 
 %===========================================================================
-% Bibliography
+\bibliographystyle{IEEEtran}
+\bibliography{sc16-implicit}
+%===========================================================================
 
 
 
