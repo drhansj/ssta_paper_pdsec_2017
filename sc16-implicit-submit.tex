@@ -91,6 +91,78 @@ The abstract goes here. We should say something clever and thought provoking.
 \item Performance results, scaling, comparison, by platform / parameter
 \item Future work: communication hiding, load imbalance, IMEX
 \end{itemize}
+(Bryce's email comments) Looking over the outline:
+\\
+It's crucial that we clearly identify the optimizations that we
+believe are novel/high-impact, vs the optimizations that are
+well-known to the community (even if they were not well known to us).
+For example, on the outline, we have listed "IMEX RK accum, tiling".
+Do we want to present the accumulation optimizations which removed
+unnecessary temporaries from the time integrator? Do we feel that
+optimization is novel, or is that just a common-sense thing that only
+affected us because of the Chombo programming model? Likewise, do we
+want to present tiling as a focal point in this paper? Tiling is a
+well-known technique; we certainly can't claim tiling in general as
+novel work. Is some part of our tiling approach novel? (how about
+parallelizing the tile loop - is that fairly novel? I know Sam does
+this in HPGMG, but is this a widely used technique?)
+\\
+We would be well served by applying the scientific method at this juncture:
+\\
+\begin{itemize}
+\item Question: What concrete research question(s) are we answering?
+\begin{itemize}
+\item Prior research indicates that HE-VI methods show promise as a
+scalable approach to solving global climate problems on cubed sphere
+geometries because <explanation> [cite prior studies]. How do we
+implement HE-VI methods which perform well on cache-coherent SIMD
+architectures?
+\item When solving a problem with a high horizontal-vertical aspect ratio
+(e.g. the horizontal extents are much greater than the vertical
+extents) with HE-VI methods, it is necessary to perform a large number
+of small vertical implicit solves (<give examples of matrix sizes>
+[citation]) which are independent of each other. <explain the type of
+solves in the climate dycore - e.g. non-linear but nearly banded>
+[citation]. How can we efficiently solve large quantities of small
+non-linear bandedish/banded/tridiagonal matrices on cache-coherent
+SIMD architectures?
+\end{itemize}
+\item Hypothesis: What theories did we come up with that would answer our
+research question(s)?
+\begin{itemize}
+\item Optimal memory access patterns, management of working set sizes
+(e.g. staying in cache) and efficient use of vector units are
+necessary to achieve good performance on cache-coherent SIMD
+architectures.
+\begin{itemize}
+\item Optimal memory access patterns: moving through memory in unit
+stride, controlling the number of streams.
+\item Management of working set sizes: tiling, reducing size of
+temporaries/localizing temporaries (thread-local or otherwise)
+\item Efficient use of vector units: moving through memory in unit
+stride, controlling memory alignment, controlling array strides,
+annotation-assisted autovectorization
+\item TODO: List of individual, concrete optimizations from above.
+\end{itemize}
+\item Mainstream linear algebra libraries (<examples> [citation]) are not
+well-suited for solving large quantities of small non-linear
+bandedish/banded/tridiagonal matrices on cache-coherent SIMD
+architectures because <expalanation> [cite prior studies if possible].
+\end{itemize}
+
+
+\item Prediction: If our hypotheses are true, what results can we expect to
+see? \\
+$\rightarrow$ TODO: What performance characteristics should we see with and
+without each of the concrete optimizations from our hypothesis above?
+
+\item Experiment: Investigate the predictions we've made. \\
+$\rightarrow$ TODO: Methodology for benchmarking the optimizations identified
+above and measuring the performance characteristics we're interested
+in.
+
+\item Analysis: What were the results of our experiments?
+\end{itemize}
 % 
 
 %===========================================================================
