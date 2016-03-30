@@ -5,6 +5,7 @@
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage{amsfonts}
+\usepackage{hyperref}
 \usepackage{cite}
 \newcommand{\fix}[1]{{\bf \textcolor {red}{#1}}}
 %===========================================================================
@@ -61,7 +62,15 @@
 
 %===========================================================================
 \begin{abstract}
-The abstract goes here. We should say something clever and thought provoking.
+\fix{Hans - Update for implicit-only}
+
+Horizontal Explicit/Vertical Implicit (HE/VI) methods show promise as a scalable
+approach to solving global climate problems on cubed sphere geometries. When
+solving problems with a high horizontal-vertical aspect ratio HE/VI methods, it
+is necessary to perform a large number of small vertical implicit solves which
+are independent of each other. We present a performant approach for solving
+large quantities of independent matrix problems on cache-coherent SIMD
+architectures.
 \end{abstract}
 
 % no keywords
@@ -168,30 +177,71 @@ in.
 %===========================================================================
 \section{Introduction}
 % 
+\fix{Hans to write}
+Argument for uniqueness:
+
+- Different at every point: nonlinear iter, banded / sparse, tridiagonal, result
+of Schur complement
+
+- Algorithm doesn't require pivoting (why?)
+
+- Vectorized (in-place) banded/tri-diag MM
+
+- Size of matrices 30 - 100
+
+- SIMD architectures (not SIMT GPU)
+
+- Mixed precision ops (float reciprocal vs. double divides)
+
+- Tiled (experiment for non-tiled code blowing out cache)
+
+\fix{Hans to write - put in science motivation}
 
 %===========================================================================
 \section{Related Work}
+\fix{Hans to write - put in }
+Is this unique? Have to look at batched / tiled sparse solvers, on Intel
+architecture.
+
 MKL
 
 Links Hans sent
+\begin{itemize}
+\item Built-to-order BLAS \cite{Spampinato:2014}
+\item Blaze \cite{BlazeSite}
+\item PLASMA \cite{PLASMASite}
+\item MAGMA \cite{Haidar:2015}
+\end{itemize}
+
 
 etc...
 
 %===========================================================================
 \section{Optimizations}
+\fix{Bryce to write}
 Optimizations
 
 %===========================================================================
 \section{Experimental Setup}
+\fix{Bryce to write}
 Edison~\cite{Edison_website}, Cori, etc...
 Compilers
 Problem Size
 
+\begin{itemize}
+\item 3x3 or 30x30 or 400x400
+\item Vectorized vs. MKL / non-vectorized
+\item Mixed precision
+\item Tiled (experiment for non-tiled code blowing out cache)
+\end{itemize}
+
 %===========================================================================
 \section{Results and Analysis}
+\fix{Bryce to write}
 
 %===========================================================================
 \section{Conclusion}
+\fix{Bryce to write}
 The conclusion goes here.
 
 
