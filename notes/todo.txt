@@ -1,0 +1,29 @@
+* Implement "MKL Cached" variant
+* Port "Streaming Mixed Precision NR" and "MKL Cached" standalone variants to Chombo variants
+* Add OpenMP to standalone variants
+
+* Hardware
+    * Edison (Ivybridge)
+    * Cori (Haswell)
+    * KNC (LSU machine)
+
+* Experiments
+    * OpenMP pinning sweep
+        * All standalone variants
+    * Tile size sweep and vtune characterization 
+        * All standalone variants
+    * Single-node walltime
+        * All standalone variants
+    * Single-node performance vs theoretical and vtune characterization
+        * "Streaming Mixed Precision NR" and "Streaming Double Precision" standalone variants
+    * Accuracy vs performance characterization
+        * All "Streaming" standalone variants
+    * Scaling runs
+        * All Chombo variants
+
+* Figures (see photos from my notebook)
+    1.) Performance Comparison of the Different Algorithmic Approaches 
+    2.) Effect of Tiling on Performance
+    3.) Impact of the RCP Optimization on Performance Bounds
+    4.) Computational and Numerical Performance of the RCP Optimization
+    5.) Scaling Comparison 
