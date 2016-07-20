@@ -1,5 +1,59 @@
 \documentclass[conference]{IEEEtran}
+
+% Fix to revert the changes IEEEtran makes to table caption styles
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd{\@makecaption}
+  {\scshape}
+  {}
+  {}
+  {}
+\makeatother
+\usepackage[font=scriptsize,justification=justified,singlelinecheck=false]{caption}
+
 %===========================================================================
+\usepackage{listings}
+\lstloadlanguages{C++,Pascal}
+
+% Settings for the lstlistings environment
+\lstset{
+language=C++,                       % choose the language of the code
+basicstyle=\footnotesize\ttfamily,  % the size of the fonts that are used for the
+                                    % code
+numbers=none,                       % where to put the line-numbers
+numberstyle=\tiny,                  % the size of the fonts that are used for the
+                                    % line-numbers
+stepnumber=1,                       % the step between two line-numbers. If it's
+                                    % 1 each line will be numbered
+numbersep=5pt,                      % how far the line-numbers are from the code
+%backgroundcolor=\color{gray},      % choose the background color. You must add
+                                    % \usepackage{color}
+showspaces=false,                   % show spaces adding particular underscores
+showstringspaces=false,             % underline spaces within strings
+showtabs=false,                     % show tabs within strings adding particular
+                                    % underscores
+keywordstyle=\bfseries\color{darkblue},  % color of the keywords
+commentstyle=\color{darkgreen},     % color of the comments
+stringstyle=\color{darkred},        % color of strings
+captionpos=b,                       % sets the caption-position to top
+tabsize=2,                          % sets default tabsize to 2 spaces
+frame=tb,                           % adds a frame around the code
+breaklines=true,                    % sets automatic line breaking
+breakatwhitespace=false,            % sets if automatic breaks should only happen
+                                    % at whitespace
+escapechar=\%,                      % toggles between regular LaTeX and listing
+belowskip=0.3cm,                    % vspace after listing
+morecomment=[s][\bfseries\color{darkblue}]{struct}{\ },
+morecomment=[s][\bfseries\color{darkblue}]{class}{\ },
+morecomment=[s][\bfseries\color{darkblue}]{public:}{\ },
+morecomment=[s][\bfseries\color{darkblue}]{public}{\ },
+morecomment=[s][\bfseries\color{darkblue}]{protected:}{\ },
+morecomment=[s][\bfseries\color{darkblue}]{private:}{\ },
+morecomment=[s][\bfseries\color{black}]{operator+}{\ },
+xleftmargin=0.1cm,
+%xrightmargin=0.1cm,
+}
+
 \usepackage{color}
 \usepackage{comment}
 \usepackage{graphicx}
@@ -215,9 +269,87 @@ Links Hans sent
 etc...
 
 %===========================================================================
-\section{Optimizations}
+\section{Implementation}
 \fix{Bryce to write}
-Optimizations
+
+To solve a positive-definite symmetric tridiagonal system\fixit{diagonally
+dominant?}, a simplified form of Gaussian elimination which does not perform
+any pivoting can be used. This method is known as the Thomas algorithm~\cite{},
+and it is \(O(n)\) in time, a significant improvement over full Gaussian
+elimination, which is \(O(n^3)\) in time.
+
+\[
+\begin{bmatrix}
+b_0 & c_0 &     &         & 0       \\
+a_1 & b_1 & c_1 &         &         \\
+    & a_2 & b_2 & ...     &         \\
+    &     & ... & ...     & c_{n-2} \\
+0   &     &     & a_{n-1} & b_{n-1}
+\end{bmatrix}
+\begin{bmatrix}
+u_0     \\
+u_1     \\
+...     \\
+...     \\
+u_{n-1}
+\end{bmatrix}
+=
+\begin{bmatrix}
+u_0     \\
+u_1     \\
+...     \\
+...     \\
+u_{n-1}
+\end{bmatrix}
+\]
+
+Forward elimination:
+
+\begin{lstlisting}
+for (index_type k = 1; k < n; ++k) {
+    double const m = a[k] / b[k - 1];
+    b[k] = b[k] - m * c[k - 1];
+    u[k] = u[k] - m * u[k - 1];
+} 
+\end{lstlisting}
+
+Backward substitution:
+
+\begin{lstlisting}
+u[n - 1] = d[n - 1] / b[n - 1];
+
+for (index_type k = n - 2 ; k >= 0; --k) {
+    u[k] = (u[k] - c[k] * u[k + 1]) / b[k];
+} 
+\end{lstlisting}
+
+TODO: Mention that algorithm is in-place and destroys the input matrix. Describe
+AI.
+
+In the applications described in Section~\ref{}, we perform such a solve on
+each vertical (e.g. \(z\)) "column" in a 3D Cartesian grid (Figure~\ref{1}). The
+matrix coefficients for each column depend on the problem state, so a unique
+matrix for each column needs to be constructed before each solve. There are two
+different approaches to computing these batch solves:
+
+\begin{itemize}
+\item \textbf{Solve Columns Independently}: The most straightforward approach is to deal with each tridiagonal solve separately, independent of the other solves. An \(nz\)x\(nz\) matrix is constructed for each column, and then the Thomas algorithm is used to solve the system formed by the matrix and the vertical column. Because the column solves are independent, different column solves can be executed concurrently via task-level parallelism. Additionally, vectorization can be attempted in the vertical (\(z\)) dimension for each independent solve. 
+\item \textbf{Interleave Column Solves}: The alternative approach is to simultaneously solve multiple columns. For each \(tw_x\)x\(tw_y\) horizontal tile of the grid, a \(tw_x\)x\(tw_y\) subgrid of \(nz\)x\(nz\) matrices (e.g. a 4D grid stored in a contiguous memory region) is constructed, and then a modified Thomas algorithm is used to simultaneously solve \(tw_x\)x\(tw_y\) independent vertical columns. Each tile is solved independently, so the tile solves can be executed concurrently via task-level parallelism. Data-level parallelism can be applied in one of the two horizontal dimensions (\(x\) or \(y\)).
+\end{itemize}
+
+The interleaved approach offers a major benefit over the independent approach;
+it allows vectorization in one of the horizontal dimensions. The independent
+approach is restricted to vectorizing in the vertical dimension. The extent of
+the vertical dimension (\(nz\)) tends to be very small in the applications we are
+concerned with (\fix{HOW SMALL}). In this approach, the loops we are trying to
+vectorize will typically have iteration counts between 10 and 100. If we
+vectorize in one of the horizontal dimensions, we can control the iteration
+count of the loops via the tile size. Additionally, we cannot vectorize the
+forward-elimination loop, because it contains a read-after-write dependency
+(\fix{ELABORATE}).
+
+Thus, we pick one of the horizontal dimensions as our unit stride dimension.
+The vertical dimension will have the greatest stride. 
 
 %===========================================================================
 \section{Experimental Setup}
@@ -236,6 +368,32 @@ Problem Size
 %===========================================================================
 \section{Results and Analysis}
 \fix{Bryce to write}
+
+\begin{table}%[htbp]
+\center
+\scriptsize
+\caption{\textbf{Comparison of Mixed-Precision and Double-Precision Algorithms}:
+To study the trade-off in performance and accuracy between the mixed-precision
+and double-precision variants of our algorithm, we solved a 1D diffusion
+problem with both codes on a single Intel Xeon ??? "Ivy Bridge" core. We used
+two measures to quantify error: the L2 norm of the difference between the
+analytic solution and the computing solution, and the absolute maximum of the
+residual vector of the tridiagonal solve. The test problem had storage
+requirements of approximately ~4.3 GB. 10 sample runs were performed with each
+sample performing 5 time steps. The walltime and uncertainty metrics below are
+normalized to the double-precision results; the L2 norm and residual metrics
+specify order of magnitude.
+}
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{|c|c|c|c|} \hline
+\textbf{Algorithm} & \textbf{Walltime (Normalized)} & \textbf{L2 Norm} & \textbf{Residual} \\ \hline
+Double-Precision   & 1.0   $\pm$ 0.007              & O(1e-07)         & O(1e-16)          \\ \hline 
+Mixed-Precision    & 0.836 $\pm$ 0.006              & O(1e-06)         & O(1e-08)          \\ \hline
+\end{tabular}
+\label{tab:mixed_vs_double}
+\end{table}
+
 
 %===========================================================================
 \section{Conclusion}
