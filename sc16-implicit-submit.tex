@@ -250,24 +250,62 @@ reciprocal (cuts divides in half) for fixed file size (4?)
 \section{Introduction}
 % 
 \fix{Hans to write}
-Argument for uniqueness:
-
-- Different at every point: nonlinear iter, banded / sparse, tridiagonal, result
-of Schur complement
-
-- Algorithm doesn't require pivoting (why?)
-
-- Vectorized (in-place) banded/tri-diag MM
-
-- Size of matrices 30 - 100
-
-- SIMD architectures (not SIMT GPU)
-
-- Mixed precision ops (float reciprocal vs. double divides)
-
-- Tiled (experiment for non-tiled code blowing out cache)
-
-\fix{Hans to write - put in science motivation}
+One important class of problems in computational science is the solving
+  of smaller-dimensional matrix subproblems that are duplicated across
+  many degrees of freedom in a larger two or more dimension computation.
+Several examples of this include: 
+\begin{itemize}
+\item Pointwise chemistry systems in the context of a larger, 
+  flow simulations. 
+Examples include geochemistry \cite{??}, cloud microphysics \cite{??},
+  and combustion \cite{??};
+\item Solving one-dimensional systems that represent a ``primary''
+  direction for a physical phenomenon.
+Examples here include atmospheric radiation \cite{??}, groundwater
+  penetration \cite{??}, or models for cloud convection \cite{??}; and
+\item Implicit solvers that need to couple these kinds of subsystems, 
+  such as physics-based preconditioners \cite{??}, alternating 
+  direction implicit ADI, \cite{??}, and operator-split or
+  semi-implicit time integrators \cite{??}.
+\end{itemize}
+In most cases, these matrices are relatively small 
+  (ranging from $O(10-100)$ chemistry components or ``levels'' 
+  in a climate application), and may be sparse or dense, but must 
+  to be solved repeatedly, but with different entries each time, 
+  to advance the overall simulation.
+Thus, because these are often non-linear matrix systems with space- and 
+  time-dependent entries, these applications may not use a 
+  ``factor once, solve many times'' approach, which is often used 
+  as a model matrix performance test.
+This prevents amortizing setup and factorization costs
+  across multiple right-hand side solves as in \emph{dgxxxxx} \cite{??},
+  and also challenges SIMD vectorization due to the odd size and
+  dissimilar entries of the matrices, as well as the 
+  memory access patterns relative to the bigger simulation data layout.
+In that case, it is usually sub-optimal on many-core SIMD 
+  or SIMT GPU architectures,
+  to just call an optimized linear algebra library, 
+  such as Intel's MKL version of LAPACK \cite{??} or NVIDIA's
+  cuBLAS \cite{??}; these may not achieve peak memory bandwidth 
+  and VPU performance across the range of small matrix size. 
+In that sense, it can leads applications to create their own 
+  custom implementations, which may not be optimal, and create a 
+  (potentially unnecessary) maintainance burden for the applications 
+  running across multiple many-core architectures as well. 
+  
+To this end, we have developed a model matrix kernel that mimics what
+  is encountered in these kinds of large-scale simulations.
+Key aspects of the code include:
+\begin{itemize}
+\item Matrix systems that must be created and solved
+  at each point in a two-dimensional subdomain (represented by $(i,j)$ indices)
+  of a three-dimensional application (that is, $(i,j,k)$ indices).
+\item Each matrix is tri-diagonal, and must be solved for all $O(30-100)$
+  values in the $k$ index.
+\item The matrix is derived from finite difference discretization for the
+  1D diffusion equation, which allows it to be solved without pivoting
+  (pivoting will be addressed in future work).
+\end{itemize}
 
 %===========================================================================
 \section{Related Work}
@@ -283,6 +321,7 @@ Links Hans sent
 \item Blaze \cite{BlazeSite}
 \item PLASMA \cite{PLASMASite}
 \item MAGMA \cite{Haidar:2015}
+\item libxsmm \cite{??}
 \end{itemize}
 
 
