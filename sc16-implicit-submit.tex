@@ -32,7 +32,7 @@ showspaces=false,                   % show spaces adding particular underscores
 showstringspaces=false,             % underline spaces within strings
 showtabs=false,                     % show tabs within strings adding particular
                                     % underscores
-keywordstyle=\bfseries\color{darkblue},  % color of the keywords
+keywordstyle=\bfseries\color{blue},  % color of the keywords
 commentstyle=\color{darkgreen},     % color of the comments
 stringstyle=\color{darkred},        % color of strings
 captionpos=b,                       % sets the caption-position to top
@@ -43,12 +43,12 @@ breakatwhitespace=false,            % sets if automatic breaks should only happe
                                     % at whitespace
 escapechar=\%,                      % toggles between regular LaTeX and listing
 belowskip=0.3cm,                    % vspace after listing
-morecomment=[s][\bfseries\color{darkblue}]{struct}{\ },
-morecomment=[s][\bfseries\color{darkblue}]{class}{\ },
-morecomment=[s][\bfseries\color{darkblue}]{public:}{\ },
-morecomment=[s][\bfseries\color{darkblue}]{public}{\ },
-morecomment=[s][\bfseries\color{darkblue}]{protected:}{\ },
-morecomment=[s][\bfseries\color{darkblue}]{private:}{\ },
+morecomment=[s][\bfseries\color{blue}]{struct}{\ },
+morecomment=[s][\bfseries\color{blue}]{class}{\ },
+morecomment=[s][\bfseries\color{blue}]{public:}{\ },
+morecomment=[s][\bfseries\color{blue}]{public}{\ },
+morecomment=[s][\bfseries\color{blue}]{protected:}{\ },
+morecomment=[s][\bfseries\color{blue}]{private:}{\ },
 morecomment=[s][\bfseries\color{black}]{operator+}{\ },
 xleftmargin=0.1cm,
 %xrightmargin=0.1cm,
@@ -139,6 +139,9 @@ cache-coherent SIMD architectures.
 \IEEEpeerreviewmaketitle
 
 %===========================================================================
+Submission info:
+\url{https://easychair.org/conferences/?conf=pmbs16}
+
 \section*{Outline}
 \begin{itemize}
 \item Climate apps use HE-VI model 3D+1D. Also a pattern for 2D+1D and 3D+0D chemistry
@@ -224,6 +227,23 @@ in.
 
 \item Analysis: What were the results of our experiments?
 \end{itemize}
+
+List of figures from meeting on 8/11:
+For KNL, HSW, SNB(?)...
+\begin{enumerate}
+\item Baseline performance using MKL (and hand) using i-major data layout (not
+vectorized)
+\item Performance as a function of 32b RCP NR (not needed on KNL), stored
+reciprocal (cuts divides in half) for fixed file size (4?)
+\item Performance vs. Tile Size (jtile = 1,2,4,8,16,32)
+\item Best Performance vs. MKL using same data layout vs. MKL using its best
+(include DRAM BW limit)
+\item Performance as a function of total parallelism for constant tile size
+[optional time permitting]
+\item Performance with 2,3,4 hyperthreads...  maybe just prose comments?
+\item effect of kdim != pow(2)... maybe just prose comments?
+\end{enumerate}
+
 % 
 
 %===========================================================================
@@ -272,7 +292,7 @@ etc...
 \section{Implementation}
 \fix{Bryce to write}
 
-To solve a positive-definite symmetric tridiagonal system\fixit{diagonally
+To solve a positive-definite symmetric tridiagonal system \fix{diagonally
 dominant?}, a simplified form of Gaussian elimination which does not perform
 any pivoting can be used. This method is known as the Thomas algorithm~\cite{},
 and it is \(O(n)\) in time, a significant improvement over full Gaussian
@@ -418,13 +438,6 @@ This material is based upon work supported by the U.S. Department of Energy, Off
 \bibliography{sc16-implicit}
 %===========================================================================
 
-
-\newpage
-\section*{Timeline for results}
-\input{timeline}
-
-
-%===========================================================================
 \end{document}
 
 
