@@ -116,13 +116,28 @@ xleftmargin=0.1cm,
 
 %===========================================================================
 \begin{abstract}
-Horizontal Explicit/Vertical Implicit (HE/VI) methods show promise as a
-scalable approach to solving global climate problems on cubed sphere
-geometries. When solving problems with a high horizontal-vertical aspect ratio
-HE/VI methods, it is necessary to perform a large number of small vertical
-implicit solves which are independent of each other. We present a performant
-approach for solving large quantities of independent matrix problems on
-cache-coherent SIMD architectures. 
+A number of computational science algorithms lead to discretization
+  that require a large number of small matrix solves, which are independent 
+  of each other for that step of the algorithm.
+Examples include small non-linear coupled chemistry and flow systems,
+  one-dimensional sub-systems in climate and diffusion simulations, 
+  alternating direction implicit pre-conditioners, and 
+  semi-implicit time integrators, among others.
+We present a performant approach for solving large quantities of 
+  independent matrix problems on cache-coherent SIMD architectures. 
+Unlike many vectorized or ``batched'' approaches that rely on reusing
+  the matrix factorization across multiple solves, our algorithm supports
+  the more difficult case when the matrices may be different in both
+  space and across iterations in non-linear solvers, for example.
+We demonstrate the approach with a prototypical tridiagonal matrix solver,
+  derived from a 1D solver that is part of an implicit-explicit 
+  finite difference discretization for a 3D advection-diffusion problem.
+Performance is evaluated on several Intel architectures with different cache,
+  vectorization, and threading features, and compared to theoretical
+  roofline models in several parameter studies.
+We conclude that the approach is effective at optimizing both vectorization 
+  and memory bandwidth, and improves on existing approaches for solving
+  large numbers of small matrix problems repeatedly.
 \end{abstract}
 
 % no keywords
@@ -249,7 +264,6 @@ reciprocal (cuts divides in half) for fixed file size (4?)
 %===========================================================================
 \section{Introduction}
 % 
-\fix{Hans to write}
 One important class of problems in computational science is the solving
   of smaller-dimensional matrix subproblems that are duplicated across
   many degrees of freedom in a larger two or more dimension computation.
