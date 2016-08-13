@@ -116,9 +116,8 @@ xleftmargin=0.1cm,
 
 %===========================================================================
 \begin{abstract}
-A number of computational science algorithms lead to discretization
-  that require a large number of small matrix solves, which are independent 
-  of each other for that step of the algorithm.
+A number of computational science algorithms lead to discretizations
+  that require a large number of independent, small matrix solves.
 Examples include small non-linear coupled chemistry and flow systems,
   one-dimensional sub-systems in climate and diffusion simulations, 
   alternating direction implicit pre-conditioners, and 
@@ -127,17 +126,17 @@ We present a performant approach for solving large quantities of
   independent matrix problems on cache-coherent SIMD architectures. 
 Unlike many vectorized or ``batched'' approaches that rely on reusing
   the matrix factorization across multiple solves, our algorithm supports
-  the more difficult case when the matrices may be different in both
-  space and across iterations in non-linear solvers, for example.
+  the case of sets of matrices that are different, due to
+  spatial variation or non-linear solvers, for example.
 We demonstrate the approach with a prototypical tridiagonal matrix solver,
   derived from a 1D solver that is part of an implicit-explicit 
   finite difference discretization for a 3D advection-diffusion problem.
 Performance is evaluated on several Intel architectures with different cache,
   vectorization, and threading features, and compared to theoretical
-  roofline models in several parameter studies.
+  roofline models across parameter studies.
 We conclude that the approach is effective at optimizing both vectorization 
-  and memory bandwidth, and improves on existing approaches for solving
-  large numbers of small matrix problems repeatedly.
+  and memory bandwidth, and improves on existing approaches for efficiently
+  solving large numbers of small matrix problems.
 \end{abstract}
 
 % no keywords
@@ -154,10 +153,307 @@ We conclude that the approach is effective at optimizing both vectorization
 \IEEEpeerreviewmaketitle
 
 %===========================================================================
+\section{Introduction}
+% 
+One important class of problems in computational science is the solving
+  of smaller-dimensional matrix subproblems that are duplicated across
+  many degrees of freedom in a larger two or more dimension computation.
+Several examples of this include: 
+\begin{itemize}
+\item Pointwise chemistry systems in the context of a larger, 
+  flow simulations. 
+Examples include geochemistry \cite{??}, cloud microphysics \cite{??},
+  and combustion \cite{??};
+\item Solving one-dimensional systems that represent a ``primary''
+  direction for a physical phenomenon.
+Examples here include atmospheric radiation \cite{??}, groundwater
+  penetration \cite{??}, or models for cloud convection \cite{??}; and
+\item Implicit solvers that need to couple these kinds of subsystems, 
+  such as physics-based preconditioners \cite{??}, alternating 
+  direction implicit ADI, \cite{??}, and operator-split or
+  semi-implicit time integrators \cite{??}.
+\end{itemize}
+In most cases, these matrices are relatively small 
+  (ranging from $O(10-100)$ chemistry components or ``levels'' 
+  in a climate application), and may be sparse or dense, but must 
+  to be solved repeatedly, but with different entries each time, 
+  to advance the overall simulation.
+Thus, because these are often non-linear matrix systems with space- and 
+  time-dependent entries, these applications may not use a 
+  ``factor once, solve many times'' approach, which is often used 
+  as a model matrix performance test.
+This prevents amortizing setup and factorization costs
+  across multiple right-hand side solves as in \emph{dgxxxxx} \cite{??},
+  and also challenges SIMD vectorization due to the odd size and
+  dissimilar entries of the matrices, as well as the 
+  memory access patterns relative to the bigger simulation data layout.
+In that case, it is usually sub-optimal on many-core SIMD 
+  or SIMT GPU architectures,
+  to just call an optimized linear algebra library, 
+  such as Intel's MKL version of LAPACK \cite{??} or NVIDIA's
+  cuBLAS \cite{??}; these may not achieve peak memory bandwidth 
+  and VPU performance across the range of small matrix size. 
+In that sense, it can leads applications to create their own 
+  custom implementations, which may not be optimal, and create a 
+  (potentially unnecessary) maintainance burden for the applications 
+  running across multiple many-core architectures as well. 
+  
+To this end, we have developed a model matrix kernel that mimics what
+  is encountered in these kinds of large-scale simulations.
+Key aspects of the code include:
+\begin{itemize}
+\item Matrix systems that must be created and solved
+  at each point in a two-dimensional subdomain (represented by $(i,j)$ indices)
+  of a three-dimensional application (that is, $(i,j,k)$ indices).
+\item Each matrix is tri-diagonal, and must be solved for all $O(30-100)$
+  values in the $k$ index.
+\item The matrix is derived from finite difference discretization for the
+  1D diffusion equation, which allows it to be solved without pivoting
+  (pivoting will be addressed in future work).
+\end{itemize}
+
+%===========================================================================
+\section{Related Work}
+Approaches to solving large numbers of small matrices have been done
+  in a variety of contexts.
+Many implementations simply solve each matrix in parallel or for multiple
+  right-hand sides, using platform-specific
+  implementations of LAPACK, such as Intel's Math Kernel Library \cite{??}
+  or NVIDIA's cuBLAS \cite{??} implementations.
+In many cases, there is a benefit from vectorization and thread parallelism, 
+  but there may be overheads that deteriorate performance, such as data copies
+  into local arrays, dynamic determination of optimal performance parameters, 
+  partially vectorized``peel'' loops, etc. \cite{??}.
+Some specialized approaches include specialized linear algebra-specific 
+  compilers for small problem sizes and target architectures 
+  \cite{Spampinato:2014, ??} \fix{(add build-to-order ref, Siek/Jessup?)}.
+Other libraries like 
+  \emph{Blaze} \cite{BlazeSite}, 
+  \emph{PLASMA} \cite{PLASMASite},
+  \emph{MAGMA} \cite{Haidar:2015}, and 
+  \emph{libxsmm} \cite{??}
+  are intended to support SIMD vectorization for standard vector sizes
+  as well as batched computation for sparse and dense matrices.
+Overall, there is a gap in approaches that both have vectorization,
+  regardless of matrix size, with or without dense/sparse/pivoting 
+  assumptions, amortizing factorization across multiple right-hand-sides, 
+  and other assumptions.
+\\
+\fix{(Hans - fill in more background / details on these.)}
+
+%===========================================================================
+\section{Implementation}
+\fix{Bryce to write}
+
+For a positive-definite tridiagonal system, 
+a simplified form of Gaussian elimination can be used, 
+which does not perform any pivoting. 
+This method is known as the Thomas algorithm~\cite{},
+and it is \(O(n)\) in time, a significant improvement over full Gaussian
+elimination for a completely dense matrix, which is \(O(n^3)\) in time.
+
+\[
+\begin{bmatrix}
+b_0 & c_0 &     &         & 0       \\
+a_1 & b_1 & c_1 &         &         \\
+    & a_2 & b_2 & ...     &         \\
+    &     & ... & ...     & c_{n-2} \\
+0   &     &     & a_{n-1} & b_{n-1}
+\end{bmatrix}
+\begin{bmatrix}
+u_0     \\
+u_1     \\
+...     \\
+...     \\
+u_{n-1}
+\end{bmatrix}
+=
+\begin{bmatrix}
+u_0     \\
+u_1     \\
+...     \\
+...     \\
+u_{n-1}
+\end{bmatrix}
+\]
+
+Forward elimination:
+
+\begin{lstlisting}
+for (index_type k = 1; k < n; ++k) {
+    double const m = a[k] / b[k - 1];
+    b[k] = b[k] - m * c[k - 1];
+    u[k] = u[k] - m * u[k - 1];
+} 
+\end{lstlisting}
+
+Backward substitution:
+
+\begin{lstlisting}
+u[n - 1] = d[n - 1] / b[n - 1];
+
+for (index_type k = n - 2 ; k >= 0; --k) {
+    u[k] = (u[k] - c[k] * u[k + 1]) / b[k];
+} 
+\end{lstlisting}
+
+TODO: Mention that algorithm is in-place and destroys the input matrix (this is
+ok, because of reforming the matrix for the non-linear iteration). Describe
+AI.
+
+In the applications described in Section~\ref{}, we perform such a solve on
+each vertical (e.g. \(z\)) "column" in a 3D Cartesian grid (Figure~\ref{1}). The
+matrix coefficients for each column depend on the problem state, so a unique
+matrix for each column needs to be constructed before each solve. There are two
+different approaches to computing these batch solves:
+
+\begin{itemize}
+\item \textbf{Solve Columns Independently}: The most straightforward approach is to deal with each tridiagonal solve separately, independent of the other solves. An \(nz\)x\(nz\) matrix is constructed for each column, and then the Thomas algorithm is used to solve the system formed by the matrix and the vertical column. Because the column solves are independent, different column solves can be executed concurrently via task-level parallelism. Additionally, vectorization can be attempted in the vertical (\(z\)) dimension for each independent solve. 
+\item \textbf{Interleave Column Solves}: The alternative approach is to simultaneously solve multiple columns. For each \(tw_x\)x\(tw_y\) horizontal tile of the grid, a \(tw_x\)x\(tw_y\) subgrid of \(nz\)x\(nz\) matrices (e.g. a 4D grid stored in a contiguous memory region) is constructed, and then a modified Thomas algorithm is used to simultaneously solve \(tw_x\)x\(tw_y\) independent vertical columns. Each tile is solved independently, so the tile solves can be executed concurrently via task-level parallelism. Data-level parallelism can be applied in one of the two horizontal dimensions (\(x\) or \(y\)).
+\end{itemize}
+
+The interleaved approach offers a major benefit over the independent approach;
+it allows vectorization in one of the horizontal dimensions. The independent
+approach is restricted to vectorizing in the vertical dimension. The extent of
+the vertical dimension (\(nz\)) tends to be very small in the applications we are
+concerned with (\fix{HOW SMALL}). In this approach, the loops we are trying to
+vectorize will typically have iteration counts between 10 and 100. If we
+vectorize in one of the horizontal dimensions, we can control the iteration
+count of the loops via the tile size. Additionally, we cannot vectorize the
+forward-elimination loop, because it contains a read-after-write dependency
+(\fix{ELABORATE}).
+
+Thus, we pick one of the horizontal dimensions as our unit stride dimension.
+The vertical dimension will have the greatest stride. 
+
+%===========================================================================
+\section{Experimental Setup}
+\fix{Bryce to write}
+Edison~\cite{Edison_website}, Cori, etc...
+Compilers
+Problem Size
+
+\begin{itemize}
+\item 3x3 or 30x30 or 400x400
+\item Vectorized vs. MKL / non-vectorized
+\item Mixed precision
+\item Tiled (experiment for non-tiled code blowing out cache)
+\end{itemize}
+
+%===========================================================================
+\section{Results and Analysis}
+\fix{Bryce to write}
+
+\begin{table}%[htbp]
+\center
+\scriptsize
+\caption{\textbf{Comparison of Mixed-Precision and Double-Precision Algorithms}:
+To study the trade-off in performance and accuracy between the mixed-precision
+and double-precision variants of our algorithm, we solved a 1D diffusion
+problem with both codes on a single Intel Xeon ??? "Ivy Bridge" core. We used
+two measures to quantify error: the L2 norm of the difference between the
+analytic solution and the computing solution, and the absolute maximum of the
+residual vector of the tridiagonal solve. The test problem had storage
+requirements of approximately ~4.3 GB. 10 sample runs were performed with each
+sample performing 5 time steps. The walltime and uncertainty metrics below are
+normalized to the double-precision results; the L2 norm and residual metrics
+specify order of magnitude.
+}
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{|c|c|c|c|} \hline
+\textbf{Algorithm} & \textbf{Walltime (Normalized)} & \textbf{L2 Norm} & \textbf{Residual} \\ \hline
+Double-Precision   & 1.0   $\pm$ 0.007              & O(1e-07)         & O(1e-16)          \\ \hline 
+Mixed-Precision    & 0.836 $\pm$ 0.006              & O(1e-06)         & O(1e-08)          \\ \hline
+\end{tabular}
+\label{tab:mixed_vs_double}
+\end{table}
+
+\begin{figure}%[thbp]
+\centering
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+\caption{\fix{(Add the figure)} 
+Baseline performance using MKL (and hand) 
+using i-major data layout (not vectorized), for KNL, HSW.}
+\label{fig:tbd}
+\end{figure}
+
+\begin{figure}%[thbp]
+\centering
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+\caption{\fix{(Add the figure)} 
+Performance as a function of 32b RCP NR (not needed on KNL), stored
+reciprocal (cuts divides in half) for fixed file size (4?) }
+\end{figure}
+
+\begin{figure}%[thbp]
+\centering
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+\caption{\fix{(Add the figure)} 
+Performance vs. Tile Size (jtile = 1,2,4,8,16,32) }
+\end{figure}
+
+\begin{figure}%[thbp]
+\centering
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+\caption{\fix{(Add the figure)} 
+Best Performance vs. MKL using same data layout vs. MKL using its best
+(include DRAM BW limit) }
+\end{figure}
+
+\begin{figure}%[thbp]
+\centering
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+\caption{\fix{(Add the figure)} 
+Performance as a function of total parallelism for constant tile size
+[optional time permitting] }
+\end{figure}
+
+\begin{figure}%[thbp]
+\centering
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+\caption{\fix{(Add the figure)} 
+Performance with 2,3,4 hyperthreads...  maybe just prose comments?  }
+\end{figure}
+
+\begin{figure}%[thbp]
+\centering
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+\caption{\fix{(Add the figure)} 
+effect of kdim != pow(2)... maybe just prose comments?  }
+\end{figure}
+
+
+%===========================================================================
+\section{Conclusion}
+\fix{Bryce to write}
+The conclusion goes here.
+
+
+%===========================================================================
+\section*{Acknowledgments}
+\fix{Comment this section out before submitting... Reformat before finalizing...}
+\fix{Intel IPCC ack, too}
+
+This research used resources in Lawrence Berkeley National Laboratory and the National Energy Research Scientific Computing Center, which are supported by the U.S. Department of Energy Office of Science's Advanced Scientific Computing Research program under contract number DE-AC02-05CH11231.  
+This material is based upon work supported by the U.S. Department of Energy, Office of Science, Advanced Scientific Computing Research, Scientific Discovery through Advanced Computing (SciDAC) program.
+%This research used resources of the National Energy Research Scientific Computing Center (NERSC), which is supported by the Office of Science of the U.S. Department of Energy under contract DE-AC02-05CH11231.
+%This research used resources of the Argonne Leadership Computing Facility at Argonne National Laboratory, which is supported by the Office of Science of the U.S. Department of Energy under contract DE-AC02-06CH11357.
+%This research used resources of the Oak Ridge Leadership Facility at the Oak Ridge National Laboratory, which is supported by the Office of Science of the U.S. Department of Energy under Contract No. DE-AC05-00OR22725.
+
+
+%===========================================================================
+\bibliographystyle{IEEEtran}
+\bibliography{sc16-implicit}
+%===========================================================================
+
+%===========================================================================
+% 
+
+\section*{Notes/Outline}
 Submission info:
 \url{https://easychair.org/conferences/?conf=pmbs16}
 
-\section*{Outline}
 \begin{itemize}
 \item Climate apps use HE-VI model 3D+1D. Also a pattern for 2D+1D and 3D+0D chemistry
 \item Results demonstrate importance of ``batching'' solves, MLK doesn't do
@@ -245,9 +541,11 @@ in.
 
 List of figures from meeting on 8/11:
 For KNL, HSW, SNB(?)...
+List of figures from meeting on 8/11:
+-For KNL, HSW, SNB(?)...
 \begin{enumerate}
-\item Baseline performance using MKL (and hand) using i-major data layout (not
-vectorized)
+\item Baseline performance using MKL (and hand) using i-major data layout 
+(not vectorized)
 \item Performance as a function of 32b RCP NR (not needed on KNL), stored
 reciprocal (cuts divides in half) for fixed file size (4?)
 \item Performance vs. Tile Size (jtile = 1,2,4,8,16,32)
@@ -259,237 +557,6 @@ reciprocal (cuts divides in half) for fixed file size (4?)
 \item effect of kdim != pow(2)... maybe just prose comments?
 \end{enumerate}
 
-% 
-
-%===========================================================================
-\section{Introduction}
-% 
-One important class of problems in computational science is the solving
-  of smaller-dimensional matrix subproblems that are duplicated across
-  many degrees of freedom in a larger two or more dimension computation.
-Several examples of this include: 
-\begin{itemize}
-\item Pointwise chemistry systems in the context of a larger, 
-  flow simulations. 
-Examples include geochemistry \cite{??}, cloud microphysics \cite{??},
-  and combustion \cite{??};
-\item Solving one-dimensional systems that represent a ``primary''
-  direction for a physical phenomenon.
-Examples here include atmospheric radiation \cite{??}, groundwater
-  penetration \cite{??}, or models for cloud convection \cite{??}; and
-\item Implicit solvers that need to couple these kinds of subsystems, 
-  such as physics-based preconditioners \cite{??}, alternating 
-  direction implicit ADI, \cite{??}, and operator-split or
-  semi-implicit time integrators \cite{??}.
-\end{itemize}
-In most cases, these matrices are relatively small 
-  (ranging from $O(10-100)$ chemistry components or ``levels'' 
-  in a climate application), and may be sparse or dense, but must 
-  to be solved repeatedly, but with different entries each time, 
-  to advance the overall simulation.
-Thus, because these are often non-linear matrix systems with space- and 
-  time-dependent entries, these applications may not use a 
-  ``factor once, solve many times'' approach, which is often used 
-  as a model matrix performance test.
-This prevents amortizing setup and factorization costs
-  across multiple right-hand side solves as in \emph{dgxxxxx} \cite{??},
-  and also challenges SIMD vectorization due to the odd size and
-  dissimilar entries of the matrices, as well as the 
-  memory access patterns relative to the bigger simulation data layout.
-In that case, it is usually sub-optimal on many-core SIMD 
-  or SIMT GPU architectures,
-  to just call an optimized linear algebra library, 
-  such as Intel's MKL version of LAPACK \cite{??} or NVIDIA's
-  cuBLAS \cite{??}; these may not achieve peak memory bandwidth 
-  and VPU performance across the range of small matrix size. 
-In that sense, it can leads applications to create their own 
-  custom implementations, which may not be optimal, and create a 
-  (potentially unnecessary) maintainance burden for the applications 
-  running across multiple many-core architectures as well. 
-  
-To this end, we have developed a model matrix kernel that mimics what
-  is encountered in these kinds of large-scale simulations.
-Key aspects of the code include:
-\begin{itemize}
-\item Matrix systems that must be created and solved
-  at each point in a two-dimensional subdomain (represented by $(i,j)$ indices)
-  of a three-dimensional application (that is, $(i,j,k)$ indices).
-\item Each matrix is tri-diagonal, and must be solved for all $O(30-100)$
-  values in the $k$ index.
-\item The matrix is derived from finite difference discretization for the
-  1D diffusion equation, which allows it to be solved without pivoting
-  (pivoting will be addressed in future work).
-\end{itemize}
-
-%===========================================================================
-\section{Related Work}
-\fix{Hans to write - put in }
-Is this unique? Have to look at batched / tiled sparse solvers, on Intel
-architecture.
-
-MKL
-
-Links Hans sent
-\begin{itemize}
-\item Built-to-order BLAS \cite{Spampinato:2014}
-\item Blaze \cite{BlazeSite}
-\item PLASMA \cite{PLASMASite}
-\item MAGMA \cite{Haidar:2015}
-\item libxsmm \cite{??}
-\end{itemize}
-
-
-etc...
-
-%===========================================================================
-\section{Implementation}
-\fix{Bryce to write}
-
-To solve a positive-definite symmetric tridiagonal system \fix{diagonally
-dominant?}, a simplified form of Gaussian elimination which does not perform
-any pivoting can be used. This method is known as the Thomas algorithm~\cite{},
-and it is \(O(n)\) in time, a significant improvement over full Gaussian
-elimination, which is \(O(n^3)\) in time.
-
-\[
-\begin{bmatrix}
-b_0 & c_0 &     &         & 0       \\
-a_1 & b_1 & c_1 &         &         \\
-    & a_2 & b_2 & ...     &         \\
-    &     & ... & ...     & c_{n-2} \\
-0   &     &     & a_{n-1} & b_{n-1}
-\end{bmatrix}
-\begin{bmatrix}
-u_0     \\
-u_1     \\
-...     \\
-...     \\
-u_{n-1}
-\end{bmatrix}
-=
-\begin{bmatrix}
-u_0     \\
-u_1     \\
-...     \\
-...     \\
-u_{n-1}
-\end{bmatrix}
-\]
-
-Forward elimination:
-
-\begin{lstlisting}
-for (index_type k = 1; k < n; ++k) {
-    double const m = a[k] / b[k - 1];
-    b[k] = b[k] - m * c[k - 1];
-    u[k] = u[k] - m * u[k - 1];
-} 
-\end{lstlisting}
-
-Backward substitution:
-
-\begin{lstlisting}
-u[n - 1] = d[n - 1] / b[n - 1];
-
-for (index_type k = n - 2 ; k >= 0; --k) {
-    u[k] = (u[k] - c[k] * u[k + 1]) / b[k];
-} 
-\end{lstlisting}
-
-TODO: Mention that algorithm is in-place and destroys the input matrix. Describe
-AI.
-
-In the applications described in Section~\ref{}, we perform such a solve on
-each vertical (e.g. \(z\)) "column" in a 3D Cartesian grid (Figure~\ref{1}). The
-matrix coefficients for each column depend on the problem state, so a unique
-matrix for each column needs to be constructed before each solve. There are two
-different approaches to computing these batch solves:
-
-\begin{itemize}
-\item \textbf{Solve Columns Independently}: The most straightforward approach is to deal with each tridiagonal solve separately, independent of the other solves. An \(nz\)x\(nz\) matrix is constructed for each column, and then the Thomas algorithm is used to solve the system formed by the matrix and the vertical column. Because the column solves are independent, different column solves can be executed concurrently via task-level parallelism. Additionally, vectorization can be attempted in the vertical (\(z\)) dimension for each independent solve. 
-\item \textbf{Interleave Column Solves}: The alternative approach is to simultaneously solve multiple columns. For each \(tw_x\)x\(tw_y\) horizontal tile of the grid, a \(tw_x\)x\(tw_y\) subgrid of \(nz\)x\(nz\) matrices (e.g. a 4D grid stored in a contiguous memory region) is constructed, and then a modified Thomas algorithm is used to simultaneously solve \(tw_x\)x\(tw_y\) independent vertical columns. Each tile is solved independently, so the tile solves can be executed concurrently via task-level parallelism. Data-level parallelism can be applied in one of the two horizontal dimensions (\(x\) or \(y\)).
-\end{itemize}
-
-The interleaved approach offers a major benefit over the independent approach;
-it allows vectorization in one of the horizontal dimensions. The independent
-approach is restricted to vectorizing in the vertical dimension. The extent of
-the vertical dimension (\(nz\)) tends to be very small in the applications we are
-concerned with (\fix{HOW SMALL}). In this approach, the loops we are trying to
-vectorize will typically have iteration counts between 10 and 100. If we
-vectorize in one of the horizontal dimensions, we can control the iteration
-count of the loops via the tile size. Additionally, we cannot vectorize the
-forward-elimination loop, because it contains a read-after-write dependency
-(\fix{ELABORATE}).
-
-Thus, we pick one of the horizontal dimensions as our unit stride dimension.
-The vertical dimension will have the greatest stride. 
-
-%===========================================================================
-\section{Experimental Setup}
-\fix{Bryce to write}
-Edison~\cite{Edison_website}, Cori, etc...
-Compilers
-Problem Size
-
-\begin{itemize}
-\item 3x3 or 30x30 or 400x400
-\item Vectorized vs. MKL / non-vectorized
-\item Mixed precision
-\item Tiled (experiment for non-tiled code blowing out cache)
-\end{itemize}
-
-%===========================================================================
-\section{Results and Analysis}
-\fix{Bryce to write}
-
-\begin{table}%[htbp]
-\center
-\scriptsize
-\caption{\textbf{Comparison of Mixed-Precision and Double-Precision Algorithms}:
-To study the trade-off in performance and accuracy between the mixed-precision
-and double-precision variants of our algorithm, we solved a 1D diffusion
-problem with both codes on a single Intel Xeon ??? "Ivy Bridge" core. We used
-two measures to quantify error: the L2 norm of the difference between the
-analytic solution and the computing solution, and the absolute maximum of the
-residual vector of the tridiagonal solve. The test problem had storage
-requirements of approximately ~4.3 GB. 10 sample runs were performed with each
-sample performing 5 time steps. The walltime and uncertainty metrics below are
-normalized to the double-precision results; the L2 norm and residual metrics
-specify order of magnitude.
-}
-\small
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{|c|c|c|c|} \hline
-\textbf{Algorithm} & \textbf{Walltime (Normalized)} & \textbf{L2 Norm} & \textbf{Residual} \\ \hline
-Double-Precision   & 1.0   $\pm$ 0.007              & O(1e-07)         & O(1e-16)          \\ \hline 
-Mixed-Precision    & 0.836 $\pm$ 0.006              & O(1e-06)         & O(1e-08)          \\ \hline
-\end{tabular}
-\label{tab:mixed_vs_double}
-\end{table}
-
-
-%===========================================================================
-\section{Conclusion}
-\fix{Bryce to write}
-The conclusion goes here.
-
-
-%===========================================================================
-\section*{Acknowledgments}
-\fix{Comment this section out before submitting... Reformat before finalizing...}
-\fix{Intel IPCC ack, too}
-
-This research used resources in Lawrence Berkeley National Laboratory and the National Energy Research Scientific Computing Center, which are supported by the U.S. Department of Energy Office of Science's Advanced Scientific Computing Research program under contract number DE-AC02-05CH11231.  
-This material is based upon work supported by the U.S. Department of Energy, Office of Science, Advanced Scientific Computing Research, Scientific Discovery through Advanced Computing (SciDAC) program.
-%This research used resources of the National Energy Research Scientific Computing Center (NERSC), which is supported by the Office of Science of the U.S. Department of Energy under contract DE-AC02-05CH11231.
-%This research used resources of the Argonne Leadership Computing Facility at Argonne National Laboratory, which is supported by the Office of Science of the U.S. Department of Energy under contract DE-AC02-06CH11357.
-%This research used resources of the Oak Ridge Leadership Facility at the Oak Ridge National Laboratory, which is supported by the Office of Science of the U.S. Department of Energy under Contract No. DE-AC05-00OR22725.
-
-
-%===========================================================================
-\bibliographystyle{IEEEtran}
-\bibliography{sc16-implicit}
-%===========================================================================
 
 \end{document}
 
