@@ -344,85 +344,125 @@ Problem Size
 \section{Results and Analysis}
 \fix{Bryce to write}
 
-\begin{table}%[htbp]
-\center
-\scriptsize
-\caption{\textbf{Comparison of Mixed-Precision and Double-Precision Algorithms}:
-To study the trade-off in performance and accuracy between the mixed-precision
-and double-precision variants of our algorithm, we solved a 1D diffusion
-problem with both codes on a single Intel Xeon ??? "Ivy Bridge" core. We used
-two measures to quantify error: the L2 norm of the difference between the
-analytic solution and the computing solution, and the absolute maximum of the
-residual vector of the tridiagonal solve. The test problem had storage
-requirements of approximately ~4.3 GB. 10 sample runs were performed with each
-sample performing 5 time steps. The walltime and uncertainty metrics below are
-normalized to the double-precision results; the L2 norm and residual metrics
-specify order of magnitude.
-}
-\small
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{|c|c|c|c|} \hline
-\textbf{Algorithm} & \textbf{Walltime (Normalized)} & \textbf{L2 Norm} & \textbf{Residual} \\ \hline
-Double-Precision   & 1.0   $\pm$ 0.007              & O(1e-07)         & O(1e-16)          \\ \hline 
-Mixed-Precision    & 0.836 $\pm$ 0.006              & O(1e-06)         & O(1e-08)          \\ \hline
-\end{tabular}
-\label{tab:mixed_vs_double}
-\end{table}
+%\begin{table}%[htbp]
+%\center
+%\scriptsize
+%\caption{\textbf{Comparison of Mixed-Precision and Double-Precision Algorithms}:
+%To study the trade-off in performance and accuracy between the mixed-precision
+%and double-precision variants of our algorithm, we solved a 1D diffusion
+%problem with both codes on a single Intel Xeon ??? "Ivy Bridge" core. We used
+%two measures to quantify error: the L2 norm of the difference between the
+%analytic solution and the computing solution, and the absolute maximum of the
+%residual vector of the tridiagonal solve. The test problem had storage
+%requirements of approximately ~4.3 GB. 10 sample runs were performed with each
+%sample performing 5 time steps. The walltime and uncertainty metrics below are
+%normalized to the double-precision results; the L2 norm and residual metrics
+%specify order of magnitude.
+%}
+%\small
+%\setlength{\tabcolsep}{3pt}
+%\begin{tabular}{|c|c|c|c|} \hline
+%\textbf{Algorithm} & \textbf{Walltime (Normalized)} & \textbf{L2 Norm} & \textbf{Residual} \\ \hline
+%Double-Precision   & 1.0   $\pm$ 0.007              & O(1e-07)         & O(1e-16)          \\ \hline 
+%Mixed-Precision    & 0.836 $\pm$ 0.006              & O(1e-06)         & O(1e-08)          \\ \hline
+%\end{tabular}
+%\label{tab:mixed_vs_double}
+%\end{table}
+
+%\begin{figure}%[thbp]
+%\centering
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%\caption{\fix{(Add the figure)} 
+%Baseline performance using MKL (and hand) 
+%using i-major data layout (not vectorized), for KNL, HSW.}
+%\label{fig:tbd}
+%\end{figure}
+
+%\begin{figure}%[thbp]
+%\centering
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%\caption{\fix{(Add the figure)} 
+%Performance as a function of 32b RCP NR (not needed on KNL), stored
+%reciprocal (cuts divides in half) for fixed file size (4?) }
+%\end{figure}
+
+%\begin{figure}%[thbp]
+%\centering
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%\caption{\fix{(Add the figure)} 
+%Performance vs. Tile Size (jtile = 1,2,4,8,16,32) }
+%\end{figure}
+
+%\begin{figure}%[thbp]
+%\centering
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%\caption{\fix{(Add the figure)} 
+%Best Performance vs. MKL using same data layout vs. MKL using its best
+%(include DRAM BW limit) }
+%\end{figure}
+
+%\begin{figure}%[thbp]
+%\centering
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%\caption{\fix{(Add the figure)} 
+%Performance as a function of total parallelism for constant tile size
+%[optional time permitting] }
+%\end{figure}
+
+%\begin{figure}%[thbp]
+%\centering
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%\caption{\fix{(Add the figure)} 
+%Performance with 2,3,4 hyperthreads...  maybe just prose comments?  }
+%\end{figure}
+
+%\begin{figure}%[thbp]
+%\centering
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%\caption{\fix{(Add the figure)} 
+%effect of kdim != pow(2)... maybe just prose comments?  }
+%\end{figure}
 
 \begin{figure}%[thbp]
 \centering
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-\caption{\fix{(Add the figure)} 
-Baseline performance using MKL (and hand) 
-using i-major data layout (not vectorized), for KNL, HSW.}
-\label{fig:tbd}
+\caption{\textbf{Tile Size vs Bandwidth on Sandybridge:}
+Measured bandwidth of the tridiagonal solve as a function of tile size on
+an Intel Xeon E5-2670 processor. The benchmark was run with 8 threads (each mapped
+to a single core of the CPU) and a 7.8 GB problem size. 190 sample runs were
+collected.}
+\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_snb_e5_2670_08_21_2016_8pus.pdf}
 \end{figure}
 
 \begin{figure}%[thbp]
 \centering
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-\caption{\fix{(Add the figure)} 
-Performance as a function of 32b RCP NR (not needed on KNL), stored
-reciprocal (cuts divides in half) for fixed file size (4?) }
+\caption{\textbf{Tile Size vs Bandwidth on Ivybridge:}
+Measured bandwidth of the tridiagonal solve as a function of tile size on
+an Intel Xeon E5-2695 V2 processor. The benchmark was run with 12 threads (each
+mapped to a single core of the CPU) and a 7.8 GB problem size. 160 sample runs
+were collected.}
+\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_ivb_e5_2695_v2_08_21_2016_12pus.pdf}
 \end{figure}
 
 \begin{figure}%[thbp]
 \centering
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-\caption{\fix{(Add the figure)} 
-Performance vs. Tile Size (jtile = 1,2,4,8,16,32) }
+\caption{\textbf{Tile Size vs Bandwidth on Haswell:}
+Measured bandwidth of the tridiagonal solve as a function of tile size on
+an Intel Xeon E5-2670 V3 processor. The benchmark was run with 12 threads (each
+mapped to a single core of the CPU) and a 7.8 GB problem size. 190 sample runs
+were collected.}
+\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_hsw_e5_2670_v3_08_21_2016_12pus.pdf}
 \end{figure}
 
 \begin{figure}%[thbp]
 \centering
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-\caption{\fix{(Add the figure)} 
-Best Performance vs. MKL using same data layout vs. MKL using its best
-(include DRAM BW limit) }
+\caption{\textbf{Tile Size vs Bandwidth on Knight's Landing:}
+Measured bandwidth of the tridiagonal solve as a function of tile size on
+an Intel Xeon Phi 7210 processor. The benchmark was run with 64 threads (each
+mapped to a single core of the CPU) and a 3.9 GB problem size. 130 sample runs
+were collected. The processor was configured in the "quadcache" mode, where the
+16GB high-bandwidth memory is configured as a data cache.}
+\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_knl_7210_08_21_2016_64pus.pdf}
 \end{figure}
-
-\begin{figure}%[thbp]
-\centering
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-\caption{\fix{(Add the figure)} 
-Performance as a function of total parallelism for constant tile size
-[optional time permitting] }
-\end{figure}
-
-\begin{figure}%[thbp]
-\centering
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-\caption{\fix{(Add the figure)} 
-Performance with 2,3,4 hyperthreads...  maybe just prose comments?  }
-\end{figure}
-
-\begin{figure}%[thbp]
-\centering
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-\caption{\fix{(Add the figure)} 
-effect of kdim != pow(2)... maybe just prose comments?  }
-\end{figure}
-
 
 %===========================================================================
 \section{Conclusion}
