@@ -162,40 +162,40 @@ Several examples of this include:
 \begin{itemize}
 \item Pointwise chemistry systems in the context of a larger, 
   flow simulations. 
-Examples include geochemistry \cite{??}, cloud microphysics \cite{??},
-  and combustion \cite{??};
+Examples include geochemistry~\cite{??}, cloud microphysics~\cite{??},
+  and combustion~\cite{??};
 \item Solving one-dimensional systems that represent a ``primary''
   direction for a physical phenomenon.
-Examples here include atmospheric radiation \cite{??}, groundwater
-  penetration \cite{??}, or models for cloud convection \cite{??}; and
+Examples here include atmospheric radiation~\cite{??}, groundwater
+  penetration~\cite{??}, or models for cloud convection~\cite{??}; and
 \item Implicit solvers that need to couple these kinds of subsystems, 
-  such as physics-based preconditioners \cite{??}, alternating 
-  direction implicit ADI, \cite{??}, and operator-split or
-  semi-implicit time integrators \cite{??}.
+  such as physics-based preconditioners~\cite{??}, alternating 
+  direction implicit ADI,~\cite{??}, and operator-split or
+  semi-implicit time integrators~\cite{??}.
 \end{itemize}
 In most cases, these matrices are relatively small 
   (ranging from $O(10-100)$ chemistry components or ``levels'' 
   in a climate application), and may be sparse or dense, but must 
-  to be solved repeatedly, but with different entries each time, 
+  be solved repeatedly, but with different entries each time, 
   to advance the overall simulation.
 Thus, because these are often non-linear matrix systems with space- and 
   time-dependent entries, these applications may not use a 
   ``factor once, solve many times'' approach, which is often used 
   as a model matrix performance test.
 This prevents amortizing setup and factorization costs
-  across multiple right-hand side solves as in \emph{dgxxxxx} \cite{??},
+  across multiple right-hand side solves as in \emph{dgxxxxx}~\cite{??},
   and also challenges SIMD vectorization due to the odd size and
   dissimilar entries of the matrices, as well as the 
   memory access patterns relative to the bigger simulation data layout.
 In that case, it is usually sub-optimal on many-core SIMD 
-  or SIMT GPU architectures,
-  to just call an optimized linear algebra library, 
-  such as Intel's MKL version of LAPACK \cite{??} or NVIDIA's
-  cuBLAS \cite{??}; these may not achieve peak memory bandwidth 
+  or SIMT GPU architectures
+  to simply call an optimized linear algebra library, 
+  such as Intel's MKL version of LAPACK~\cite{mkl_website} or NVIDIA's
+  cuBLAS~\cite{cublas_website}; these may not achieve peak memory bandwidth 
   and VPU performance across the range of small matrix size. 
 In that sense, it can leads applications to create their own 
   custom implementations, which may not be optimal, and create a 
-  (potentially unnecessary) maintainance burden for the applications 
+  (potentially unnecessary) maintenance burden for the applications 
   running across multiple many-core architectures as well. 
   
 To this end, we have developed a model matrix kernel that mimics what
@@ -218,20 +218,20 @@ Approaches to solving large numbers of small matrices have been done
   in a variety of contexts.
 Many implementations simply solve each matrix in parallel or for multiple
   right-hand sides, using platform-specific
-  implementations of LAPACK, such as Intel's Math Kernel Library \cite{??}
-  or NVIDIA's cuBLAS \cite{??} implementations.
+  implementations of LAPACK, such as Intel's Math Kernel Library~\cite{mkl_website}
+  or NVIDIA's cuBLAS~\cite{cublas_website} implementations.
 In many cases, there is a benefit from vectorization and thread parallelism, 
-  but there may be overheads that deteriorate performance, such as data copies
+  but there may be overheads that reduce performance such as data copies
   into local arrays, dynamic determination of optimal performance parameters, 
-  partially vectorized``peel'' loops, etc. \cite{??}.
+  partially vectorized ``peel'' loops, etc.~\cite{??}.
 Some specialized approaches include specialized linear algebra-specific 
   compilers for small problem sizes and target architectures 
-  \cite{Spampinato:2014, ??} \fix{(add build-to-order ref, Siek/Jessup?)}.
+ ~\cite{Spampinato:2014, ??} \fix{(add build-to-order ref, Siek/Jessup?)}.
 Other libraries like 
-  \emph{Blaze} \cite{BlazeSite}, 
-  \emph{PLASMA} \cite{PLASMASite},
-  \emph{MAGMA} \cite{Haidar:2015}, and 
-  \emph{libxsmm} \cite{??}
+  \emph{Blaze}~\cite{BlazeSite}, 
+  \emph{PLASMA}~\cite{PLASMASite},
+  \emph{MAGMA}~\cite{Haidar:2015}, and 
+  \emph{libxsmm}~\cite{libxsmm_website}
   are intended to support SIMD vectorization for standard vector sizes
   as well as batched computation for sparse and dense matrices.
 Overall, there is a gap in approaches that both have vectorization,
@@ -247,7 +247,7 @@ Overall, there is a gap in approaches that both have vectorization,
 
 Suppose we have a symmetric positive-definite or diagonally-dominant $n$x$n$
 tridiagonal matrix $A$ and two $n$-element vectors $u^{s}$ and $u^{s+1}$. We
-wish to solve $A * u^{s+1} = u^{s}$ for $u^{s}$:
+wish to solve $Au^{s+1} = u^{s}$ for $u^{s}$:
 
 \[
 \begin{bmatrix}
@@ -280,16 +280,16 @@ super-diagonal vector $c$.
 
 We can use a simplified form of Gaussian elimination which does not perform any
 pivoting to solve such a system. This method is known as the Thomas algorithm
-or the tridiagonal matrix algorithm (TDMA)~\cite{}, and it is \(O(n)\) in time,
+or the tridiagonal matrix algorithm (TDMA)~\cite{TDMA}, and it is \(O(n)\) in time,
 a significant improvement over full Gaussian elimination for a completely dense
 matrix, which is \(O(n^3)\) in time. We use the in-place Thomas algorithm,
 which does not require any storage for temporary values but overwrites the $b$
 vector. We will also solve for $u^{s+1}$ in-place, overwriting $u^{s}$ (so our
-system is $A * u$).
+system is $Au$).
 
 % Citation here is elementary numerical analysis
 The Thomas algorithm consists of two passes. First, a forward pass is performed
-to eliminate the $a_i$ elements~\cite{}:
+to eliminate the $a_i$ elements~\cite{??}:
 
 \begin{lstlisting}
 for (auto k = 1; k < n; ++k) {
@@ -300,7 +300,7 @@ for (auto k = 1; k < n; ++k) {
 \end{lstlisting}
 
 Then, an abbreviated form of backwards substitution is performed to obtain the
-solution~\cite{}:
+solution~\cite{??}:
 
 \begin{lstlisting}
 u[n - 1] = u[n - 1] / b[n - 1];
@@ -332,9 +332,9 @@ for (auto k = n - 2 ; k >= 0; --k) {
 
 \subsection{Parallelization and Vectorization Strategy}
 
-In the applications described in Section~\ref{}, we need to compute the
+In the applications described in Section~\ref{??}, we need to compute the
 solution to a tridiagonal system via the Thomas algorithm on each vertical
-(e.g. \(z\)) column in a \(nx\)x\(ny\)x\(nz\) Cartesian grid (Figure~\ref{1}).
+(e.g. $z$) column in a $nx \times ny \times nz$ Cartesian grid (Figure~\ref{1}).
 These computations are known as the \textbf{vertical solves}. The matrix
 coefficients for each column depend on the problem state, so a unique matrix
 for each column needs to be constructed before each solve. There are two
@@ -342,18 +342,18 @@ different approaches to computing these batch solves: solve each column
 independently, or simultaneously solve multiple columns.
 
 The most straightforward approach is to deal with each tridiagonal solve
-separately, independent of the other solves. An \(nz\)x\(nz\) tridiagonal
+separately, independent of the other solves. An $nz\times nz$ tridiagonal
 matrix is constructed for each column, and then the Thomas algorithm is used to
 solve the system formed by the matrix and the vertical column. Because the
 column solves are independent, different column solves can be executed
-concurrently via task-level parallelism. Vectorization of the \(nz\) loop is
-not possible - each iteration of the solve is dependent on previous iterations.
+concurrently via task-level parallelism. Vectorization of the $nz$ loop is
+not possible as each iteration of the solve is dependent on previous iterations.
 
 The other approach is to simultaneously solve multiple columns. A block
-\(nz\)x\(nz\) tridiagonal matrix is constructed for the whole grid; each block
-contained within the matrix is an \(nx\)x\(ny\) horizontal plane (e.g. the
+$nz \times nz$ tridiagonal matrix is constructed for the whole grid; each block
+contained within the matrix is an $nx \times ny$ horizontal plane (e.g. the
 block matrix is a 4D space). The entire 3D Cartesian grid is viewed as an
-\(nz\) block vector of \(nx\)x\(ny\) planes. The Thomas algorithm is then
+$nz$ block vector of $nx \times ny$ planes. The Thomas algorithm is then
 applied to the block matrix; each step of the algorithm is applied across an
 entire plane. For example, the forward sweep becomes:
 
@@ -374,7 +374,7 @@ for (auto k = 1; k < nz; ++k)
 This approach facilities both task-level parallelism and vectorization. The
 grid and block matrix can be tiled into smaller subgrids, and the Thomas
 algorithm can be applied to each subgrid independently. Each step of the Thomas
-algorithm can be vectorized across the \(nx\)x\(ny\) horizontal plane that it
+algorithm can be vectorized across the $nx \times ny$ horizontal plane that it
 is operating on: e.g. the j or i loops in the above snippet can be vectorized.
 The innermost loop can be vectorized, the innermost loop can be unrolled and
 the next-innermost loop can be vectorized, or the two innermost loops can be
@@ -391,7 +391,7 @@ The vector parallelism exposed by the simultaneous approach offers a major
 benefit over the independent approach, since it is not possible to vectorize
 most of the kernels in the independent approach due to data dependencies
 between iterations of the Thomas algorithm. Even if it was possible to
-vectorize in the vertical \(nz\) dimension, it would still be undesirable to do
+vectorize in the vertical $nz$ dimension, it would still be undesirable to do
 so. The extent of the vertical dimension tends to be very small in the
 applications we are concerned with\fix{HOW SMALL}. Vectorizing in the
 horizontal dimensions allows us to control locality and loop trip counts via
@@ -427,7 +427,7 @@ temporary buffer back to the grid.
 
 Initially, we investigated switching to the \(kji\) layout, which would give us
 contiguous vertical columns that could be passed into LAPACK and allow us to
-remove these temporary buffer allocations. We observed a noticable performance
+remove these temporary buffer allocations. We observed a noticeable performance
 increase from this change with very little source code impact (the production
 codebase we are working with does not need to interoperate with Fortran). We
 have not studied the impact of this layout change on the explicit horizontal
@@ -551,43 +551,43 @@ Problem Size
 
 \begin{figure}%[thbp]
 \centering
+\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_snb_e5_2670_08_21_2016_8pus.pdf}
 \caption{\textbf{Tile Size vs Bandwidth on Sandybridge:}
 Measured bandwidth of the tridiagonal solve as a function of tile size on
 an Intel Xeon E5-2670 processor. The benchmark was run with 8 threads (each mapped
 to a single core of the CPU) and a 7.8 GB problem size. 190 sample runs were
 collected.}
-\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_snb_e5_2670_08_21_2016_8pus.pdf}
 \end{figure}
 
 \begin{figure}%[thbp]
 \centering
+\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_ivb_e5_2695_v2_08_21_2016_12pus.pdf}
 \caption{\textbf{Tile Size vs Bandwidth on Ivybridge:}
 Measured bandwidth of the tridiagonal solve as a function of tile size on
 an Intel Xeon E5-2695 V2 processor. The benchmark was run with 12 threads (each
 mapped to a single core of the CPU) and a 7.8 GB problem size. 160 sample runs
 were collected.}
-\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_ivb_e5_2695_v2_08_21_2016_12pus.pdf}
 \end{figure}
 
 \begin{figure}%[thbp]
 \centering
+\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_hsw_e5_2670_v3_08_21_2016_12pus.pdf}
 \caption{\textbf{Tile Size vs Bandwidth on Haswell:}
 Measured bandwidth of the tridiagonal solve as a function of tile size on
 an Intel Xeon E5-2670 V3 processor. The benchmark was run with 12 threads (each
 mapped to a single core of the CPU) and a 7.8 GB problem size. 190 sample runs
 were collected.}
-\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_hsw_e5_2670_v3_08_21_2016_12pus.pdf}
 \end{figure}
 
 \begin{figure}%[thbp]
 \centering
+\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_knl_7210_08_21_2016_64pus.pdf}
 \caption{\textbf{Tile Size vs Bandwidth on Knight's Landing:}
 Measured bandwidth of the tridiagonal solve as a function of tile size on
 an Intel Xeon Phi 7210 processor. The benchmark was run with 64 threads (each
 mapped to a single core of the CPU) and a 3.9 GB problem size. 130 sample runs
 were collected. The processor was configured in the "quadcache" mode, where the
 16GB high-bandwidth memory is configured as a data cache.}
-\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_knl_7210_08_21_2016_64pus.pdf}
 \end{figure}
 
 %===========================================================================
