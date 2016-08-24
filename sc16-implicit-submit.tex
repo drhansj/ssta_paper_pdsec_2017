@@ -245,12 +245,9 @@ Overall, there is a gap in approaches that both have vectorization,
 \section{Implementation}
 \fix{Bryce to write}
 
-For a positive-definite tridiagonal system, 
-a simplified form of Gaussian elimination can be used, 
-which does not perform any pivoting. 
-This method is known as the Thomas algorithm~\cite{},
-and it is \(O(n)\) in time, a significant improvement over full Gaussian
-elimination for a completely dense matrix, which is \(O(n^3)\) in time.
+Suppose we have a symmetric positive-definite or diagonally-dominant $n$x$n$
+tridiagonal matrix $A$ and two $n$-element vectors $u^{s}$ and $u^{s+1}$. We
+wish to solve $A * u^{s+1} = u^{s}$ for $u^{s}$:
 
 \[
 \begin{bmatrix}
@@ -261,70 +258,199 @@ a_1 & b_1 & c_1 &         &         \\
 0   &     &     & a_{n-1} & b_{n-1}
 \end{bmatrix}
 \begin{bmatrix}
-u_0     \\
-u_1     \\
+u^{s+1}_0     \\
+u^{s+1}_1     \\
 ...     \\
 ...     \\
-u_{n-1}
+u^{s+1}_{n-1}
 \end{bmatrix}
 =
 \begin{bmatrix}
-u_0     \\
-u_1     \\
+u^{s}_0     \\
+u^{s}_1     \\
 ...     \\
 ...     \\
-u_{n-1}
+u^{s}_{n-1}
 \end{bmatrix}
 \]
 
-Forward elimination:
+Our matrix $A$ is stored as a set of three vectors: an $n-1$-element
+sub-diagonal vector $a$, an $n$-element diagonal vector $b$ and an $n-1$-element
+super-diagonal vector $c$.
+
+We can use a simplified form of Gaussian elimination which does not perform any
+pivoting to solve such a system. This method is known as the Thomas algorithm
+or the tridiagonal matrix algorithm (TDMA)~\cite{}, and it is \(O(n)\) in time,
+a significant improvement over full Gaussian elimination for a completely dense
+matrix, which is \(O(n^3)\) in time. We use the in-place Thomas algorithm,
+which does not require any storage for temporary values but overwrites the $b$
+vector. We will also solve for $u^{s+1}$ in-place, overwriting $u^{s}$ (so our
+system is $A * u$).
+
+% Citation here is elementary numerical analysis
+The Thomas algorithm consists of two passes. First, a forward pass is performed
+to eliminate the $a_i$ elements~\cite{}:
 
 \begin{lstlisting}
-for (index_type k = 1; k < n; ++k) {
-    double const m = a[k] / b[k - 1];
-    b[k] = b[k] - m * c[k - 1];
-    u[k] = u[k] - m * u[k - 1];
+for (auto k = 1; k < n; ++k) {
+  auto const m = a[k] / b[k - 1];
+  b[k] = b[k] - m * c[k - 1];
+  u[k] = u[k] - m * u[k - 1];
 } 
 \end{lstlisting}
 
-Backward substitution:
+Then, an abbreviated form of backwards substitution is performed to obtain the
+solution~\cite{}:
 
 \begin{lstlisting}
-u[n - 1] = d[n - 1] / b[n - 1];
+u[n - 1] = u[n - 1] / b[n - 1];
 
-for (index_type k = n - 2 ; k >= 0; --k) {
-    u[k] = (u[k] - c[k] * u[k + 1]) / b[k];
+for (auto k = n - 2 ; k >= 0; --k) {
+  u[k] = (u[k] - c[k] * u[k + 1]) / b[k];
 } 
 \end{lstlisting}
 
-TODO: Mention that algorithm is in-place and destroys the input matrix (this is
-ok, because of reforming the matrix for the non-linear iteration). Describe
-AI.
+% TODO: Describe AI
 
-In the applications described in Section~\ref{}, we perform such a solve on
-each vertical (e.g. \(z\)) "column" in a 3D Cartesian grid (Figure~\ref{1}). The
-matrix coefficients for each column depend on the problem state, so a unique
-matrix for each column needs to be constructed before each solve. There are two
-different approaches to computing these batch solves:
+% TODO: Describe cached-divide algorithm
 
-\begin{itemize}
-\item \textbf{Solve Columns Independently}: The most straightforward approach is to deal with each tridiagonal solve separately, independent of the other solves. An \(nz\)x\(nz\) matrix is constructed for each column, and then the Thomas algorithm is used to solve the system formed by the matrix and the vertical column. Because the column solves are independent, different column solves can be executed concurrently via task-level parallelism. Additionally, vectorization can be attempted in the vertical (\(z\)) dimension for each independent solve. 
-\item \textbf{Interleave Column Solves}: The alternative approach is to simultaneously solve multiple columns. For each \(tw_x\)x\(tw_y\) horizontal tile of the grid, a \(tw_x\)x\(tw_y\) subgrid of \(nz\)x\(nz\) matrices (e.g. a 4D grid stored in a contiguous memory region) is constructed, and then a modified Thomas algorithm is used to simultaneously solve \(tw_x\)x\(tw_y\) independent vertical columns. Each tile is solved independently, so the tile solves can be executed concurrently via task-level parallelism. Data-level parallelism can be applied in one of the two horizontal dimensions (\(x\) or \(y\)).
-\end{itemize}
+\begin{lstlisting}
+b[0] = 1.0 / b[0];
 
-The interleaved approach offers a major benefit over the independent approach;
-it allows vectorization in one of the horizontal dimensions. The independent
-approach is restricted to vectorizing in the vertical dimension. The extent of
-the vertical dimension (\(nz\)) tends to be very small in the applications we are
-concerned with (\fix{HOW SMALL}). In this approach, the loops we are trying to
-vectorize will typically have iteration counts between 10 and 100. If we
-vectorize in one of the horizontal dimensions, we can control the iteration
-count of the loops via the tile size. Additionally, we cannot vectorize the
-forward-elimination loop, because it contains a read-after-write dependency
-(\fix{ELABORATE}).
+for (auto k = 1; k < n; ++k) {
+  auto const m = a[k] * b[k - 1];
+  b[k] = 1.0 / (b[k] - m * c[k - 1]);
+  u[k] = u[k] - m * u[k - 1];
+} 
+\end{lstlisting}
 
-Thus, we pick one of the horizontal dimensions as our unit stride dimension.
-The vertical dimension will have the greatest stride. 
+\begin{lstlisting}
+for (auto k = n - 2 ; k >= 0; --k) {
+  u[k] = (u[k] - c[k] * u[k + 1]) * b[k];
+} 
+\end{lstlisting}
+
+\subsection{Parallelization and Vectorization Strategy}
+
+In the applications described in Section~\ref{}, we need to compute the
+solution to a tridiagonal system via the Thomas algorithm on each vertical
+(e.g. \(z\)) column in a \(nx\)x\(ny\)x\(nz\) Cartesian grid (Figure~\ref{1}).
+These computations are known as the \textbf{vertical solves}. The matrix
+coefficients for each column depend on the problem state, so a unique matrix
+for each column needs to be constructed before each solve. There are two
+different approaches to computing these batch solves: solve each column
+independently, or simultaneously solve multiple columns.
+
+The most straightforward approach is to deal with each tridiagonal solve
+separately, independent of the other solves. An \(nz\)x\(nz\) tridiagonal
+matrix is constructed for each column, and then the Thomas algorithm is used to
+solve the system formed by the matrix and the vertical column. Because the
+column solves are independent, different column solves can be executed
+concurrently via task-level parallelism. Vectorization of the \(nz\) loop is
+not possible - each iteration of the solve is dependent on previous iterations.
+
+The other approach is to simultaneously solve multiple columns. A block
+\(nz\)x\(nz\) tridiagonal matrix is constructed for the whole grid; each block
+contained within the matrix is an \(nx\)x\(ny\) horizontal plane (e.g. the
+block matrix is a 4D space). The entire 3D Cartesian grid is viewed as an
+\(nz\) block vector of \(nx\)x\(ny\) planes. The Thomas algorithm is then
+applied to the block matrix; each step of the algorithm is applied across an
+entire plane. For example, the forward sweep becomes:
+
+\begin{lstlisting}
+for (auto j = 0; j < ny; ++j)
+  for (auto i = 0; i < nx; ++i) 
+    b[i][j][0] = 1.0 / b[i][j][0];
+
+for (auto k = 1; k < nz; ++k)
+  for (auto j = 0; j < ny; ++j)
+    for (auto i = 0; i < nx; ++i) {
+      auto const m = a[i][j][k] * b[i][j][k - 1];
+      b[i][j][k] = 1.0 / (b[i][j][k] - m * c[i][j][k - 1]);
+      u[i][j][k] = u[i][j][k] - m * u[i][j][k - 1];
+    } 
+\end{lstlisting}
+
+This approach facilities both task-level parallelism and vectorization. The
+grid and block matrix can be tiled into smaller subgrids, and the Thomas
+algorithm can be applied to each subgrid independently. Each step of the Thomas
+algorithm can be vectorized across the \(nx\)x\(ny\) horizontal plane that it
+is operating on: e.g. the j or i loops in the above snippet can be vectorized.
+The innermost loop can be vectorized, the innermost loop can be unrolled and
+the next-innermost loop can be vectorized, or the two innermost loops can be
+collapsed and vectorized.
+
+% TODO: Explain that the independent solve approach is what LAPACK does, and
+% that's why it is insufficient for this type of problem. Also, explain that
+% LAPACK has no routine for Thomas-style tridiagonal solves - dgtsv is
+% generalized, does actual Gaussian eliminiation and may do pivoting.
+
+% Also mention somewhere that MKL does not parallelize dgtsv.
+
+The vector parallelism exposed by the simultaneous approach offers a major
+benefit over the independent approach, since it is not possible to vectorize
+most of the kernels in the independent approach due to data dependencies
+between iterations of the Thomas algorithm. Even if it was possible to
+vectorize in the vertical \(nz\) dimension, it would still be undesirable to do
+so. The extent of the vertical dimension tends to be very small in the
+applications we are concerned with\fix{HOW SMALL}. Vectorizing in the
+horizontal dimensions allows us to control locality and loop trip counts via
+tiling.
+
+\subsection{Data Layout}
+
+The data layout of the Cartesian grid has a huge impact on the performance
+potential of the vertical solves. Throughout the course of our research, our
+understanding of the impact of different data layouts has evolved
+substantially. We have investigated three different schemes:
+
+% kji AKA column-major, Fortran, left
+% ijk AKA row-major, C++, right
+\begin{tabular}[t]{c|c|c|c} \hline
+\textbf{Name}         & \textbf{i-stride} & \textbf{j-stride} & \textbf{k-stride}   \\
+                      &                   &                   & \textbf{(Vertical)} \\ \hline
+\(ijk\), Column-Major & \(1\)             & \(nx\)            & \(nx * ny\)         \\ 
+\(kji\), Row-Major    & \(ny * nz\)       & \(nz\)            & \(1\)               \\ 
+\(ikj\)               & \(1\)             & \(nx * nz\)       & \(nx\)              
+\end{tabular}
+
+The production codebase we are analyzing currently uses the \(ijk\) layout. The
+codebase is based on the Chombo C++ framework, which typically uses this layout
+(column-major) for interoperability with Fortran kernels. The vertical solves
+in this codebase are calculated using LAPACK. In this layout, the vertical
+dimension (\(k\)) has the greatest stride. Thus, the vertical column that we
+need to pass in to LAPACK as the solution vector (\(u\)) will be non-contiguous
+and will have little to no innate locality between elements. Currently, the
+production codebase allocates a temporary buffer, copies data from the grid
+into the buffer, calls the LAPACK solver, and then copies the result from the
+temporary buffer back to the grid.
+
+Initially, we investigated switching to the \(kji\) layout, which would give us
+contiguous vertical columns that could be passed into LAPACK and allow us to
+remove these temporary buffer allocations. We observed a noticable performance
+increase from this change with very little source code impact (the production
+codebase we are working with does not need to interoperate with Fortran). We
+have not studied the impact of this layout change on the explicit horizontal
+stencil in detail.
+
+% TODO: You've got to reference a section where you explain why it's not sufficient
+Eventually, we determined that LAPACK would not be sufficient for the vertical
+solves and that we could achieve substantially higher bandwidths by developing
+the solver described in this paper, we revisited the data layout question. As
+we would not be able to vectorize the Thomas algorithm in the vertical
+dimension due to the the loop-carried dependencies present in the algorithm, we
+decided to switch back to an \(ijk\) layout.
+
+The next layout we investigated, the \(ikj\) layout, arose as a solution to
+translation lookaside buffer (TLB) performance issues that we encountered after
+developing and studying a tiling abstraction for our solver. It is described in
+greater detail in the next section.
+
+\subsection{Tiling}
+
+% TODO: Discussion of data layout and tiling
+
+% Discussion of rolling matrix stuff
 
 %===========================================================================
 \section{Experimental Setup}
@@ -490,112 +616,112 @@ This material is based upon work supported by the U.S. Department of Energy, Off
 %===========================================================================
 % 
 
-\section*{Notes/Outline}
-Submission info:
-\url{https://easychair.org/conferences/?conf=pmbs16}
-
-\begin{itemize}
-\item Climate apps use HE-VI model 3D+1D. Also a pattern for 2D+1D and 3D+0D chemistry
-\item Results demonstrate importance of ``batching'' solves, MLK doesn't do
-\item Cache coherency is important: IMEX RK accum, tiling
-\item Explicit part is HO stencil op, memory b/w bound (w/ ghost cells)
-\item Implicit part is non-linear solver: App requires different matrix at each i,j index 
-\item Results in repeated vertical sparse banded solve
-\item Solve (tridiag, banded, dense) should vectorize on i (unit stride), tiled in pencils
-\item Considerations for vector alignment, tiling, and memory
-\item Performance results, scaling, comparison, by platform / parameter
-\item Future work: communication hiding, load imbalance, IMEX
-\end{itemize}
-(Bryce's email comments) Looking over the outline:
-\\
-It's crucial that we clearly identify the optimizations that we
-believe are novel/high-impact, vs the optimizations that are
-well-known to the community (even if they were not well known to us).
-For example, on the outline, we have listed "IMEX RK accum, tiling".
-Do we want to present the accumulation optimizations which removed
-unnecessary temporaries from the time integrator? Do we feel that
-optimization is novel, or is that just a common-sense thing that only
-affected us because of the Chombo programming model? Likewise, do we
-want to present tiling as a focal point in this paper? Tiling is a
-well-known technique; we certainly can't claim tiling in general as
-novel work. Is some part of our tiling approach novel? (how about
-parallelizing the tile loop - is that fairly novel? I know Sam does
-this in HPGMG, but is this a widely used technique?)
-\\
-We would be well served by applying the scientific method at this juncture:
-\\
-\begin{itemize}
-\item Question: What concrete research question(s) are we answering?
-\begin{itemize}
-\item Prior research indicates that HE-VI methods show promise as a
-scalable approach to solving global climate problems on cubed sphere
-geometries because <explanation> [cite prior studies]. How do we
-implement HE-VI methods which perform well on cache-coherent SIMD
-architectures?
-\item When solving a problem with a high horizontal-vertical aspect ratio
-(e.g. the horizontal extents are much greater than the vertical
-extents) with HE-VI methods, it is necessary to perform a large number
-of small vertical implicit solves (<give examples of matrix sizes>
-[citation]) which are independent of each other. <explain the type of
-solves in the climate dycore - e.g. non-linear but nearly banded>
-[citation]. How can we efficiently solve large quantities of small
-non-linear bandedish/banded/tridiagonal matrices on cache-coherent
-SIMD architectures?
-\end{itemize}
-\item Hypothesis: What theories did we come up with that would answer our
-research question(s)?
-\begin{itemize}
-\item Optimal memory access patterns, management of working set sizes
-(e.g. staying in cache) and efficient use of vector units are
-necessary to achieve good performance on cache-coherent SIMD
-architectures.
-\begin{itemize}
-\item Optimal memory access patterns: moving through memory in unit
-stride, controlling the number of streams.
-\item Management of working set sizes: tiling, reducing size of
-temporaries/localizing temporaries (thread-local or otherwise)
-\item Efficient use of vector units: moving through memory in unit
-stride, controlling memory alignment, controlling array strides,
-annotation-assisted autovectorization
-\item TODO: List of individual, concrete optimizations from above.
-\end{itemize}
-\item Mainstream linear algebra libraries (<examples> [citation]) are not
-well-suited for solving large quantities of small non-linear
-bandedish/banded/tridiagonal matrices on cache-coherent SIMD
-architectures because <expalanation> [cite prior studies if possible].
-\end{itemize}
-
-
-\item Prediction: If our hypotheses are true, what results can we expect to
-see? \\
-$\rightarrow$ TODO: What performance characteristics should we see with and
-without each of the concrete optimizations from our hypothesis above?
-
-\item Experiment: Investigate the predictions we've made. \\
-$\rightarrow$ TODO: Methodology for benchmarking the optimizations identified
-above and measuring the performance characteristics we're interested
-in.
-
-\item Analysis: What were the results of our experiments?
-\end{itemize}
-
-List of figures from meeting on 8/11:
-For KNL, HSW, SNB(?)...
-List of figures from meeting on 8/11:
--For KNL, HSW, SNB(?)...
-\begin{enumerate}
-\item Baseline performance using MKL (and hand) using i-major data layout 
-(not vectorized)
-\item Performance as a function of 32b RCP NR (not needed on KNL), stored
-reciprocal (cuts divides in half) for fixed file size (4?)
-\item Performance vs. Tile Size (jtile = 1,2,4,8,16,32)
-\item Best Performance vs. MKL using same data layout vs. MKL using its best
-(include DRAM BW limit)
-\item Performance as a function of total parallelism for constant tile size
-[optional time permitting]
-\item Performance with 2,3,4 hyperthreads...  maybe just prose comments?
-\item effect of kdim != pow(2)... maybe just prose comments?
-\end{enumerate}
+%\section*{Notes/Outline}
+%Submission info:
+%\url{https://easychair.org/conferences/?conf=pmbs16}
+%
+%\begin{itemize}
+%\item Climate apps use HE-VI model 3D+1D. Also a pattern for 2D+1D and 3D+0D chemistry
+%\item Results demonstrate importance of ``batching'' solves, MLK doesn't do
+%\item Cache coherency is important: IMEX RK accum, tiling
+%\item Explicit part is HO stencil op, memory b/w bound (w/ ghost cells)
+%\item Implicit part is non-linear solver: App requires different matrix at each i,j index 
+%\item Results in repeated vertical sparse banded solve
+%\item Solve (tridiag, banded, dense) should vectorize on i (unit stride), tiled in pencils
+%\item Considerations for vector alignment, tiling, and memory
+%\item Performance results, scaling, comparison, by platform / parameter
+%\item Future work: communication hiding, load imbalance, IMEX
+%\end{itemize}
+%(Bryce's email comments) Looking over the outline:
+%\\
+%It's crucial that we clearly identify the optimizations that we
+%believe are novel/high-impact, vs the optimizations that are
+%well-known to the community (even if they were not well known to us).
+%For example, on the outline, we have listed "IMEX RK accum, tiling".
+%Do we want to present the accumulation optimizations which removed
+%unnecessary temporaries from the time integrator? Do we feel that
+%optimization is novel, or is that just a common-sense thing that only
+%affected us because of the Chombo programming model? Likewise, do we
+%want to present tiling as a focal point in this paper? Tiling is a
+%well-known technique; we certainly can't claim tiling in general as
+%novel work. Is some part of our tiling approach novel? (how about
+%parallelizing the tile loop - is that fairly novel? I know Sam does
+%this in HPGMG, but is this a widely used technique?)
+%\\
+%We would be well served by applying the scientific method at this juncture:
+%\\
+%\begin{itemize}
+%\item Question: What concrete research question(s) are we answering?
+%\begin{itemize}
+%\item Prior research indicates that HE-VI methods show promise as a
+%scalable approach to solving global climate problems on cubed sphere
+%geometries because <explanation> [cite prior studies]. How do we
+%implement HE-VI methods which perform well on cache-coherent SIMD
+%architectures?
+%\item When solving a problem with a high horizontal-vertical aspect ratio
+%(e.g. the horizontal extents are much greater than the vertical
+%extents) with HE-VI methods, it is necessary to perform a large number
+%of small vertical implicit solves (<give examples of matrix sizes>
+%[citation]) which are independent of each other. <explain the type of
+%solves in the climate dycore - e.g. non-linear but nearly banded>
+%[citation]. How can we efficiently solve large quantities of small
+%non-linear bandedish/banded/tridiagonal matrices on cache-coherent
+%SIMD architectures?
+%\end{itemize}
+%\item Hypothesis: What theories did we come up with that would answer our
+%research question(s)?
+%\begin{itemize}
+%\item Optimal memory access patterns, management of working set sizes
+%(e.g. staying in cache) and efficient use of vector units are
+%necessary to achieve good performance on cache-coherent SIMD
+%architectures.
+%\begin{itemize}
+%\item Optimal memory access patterns: moving through memory in unit
+%stride, controlling the number of streams.
+%\item Management of working set sizes: tiling, reducing size of
+%temporaries/localizing temporaries (thread-local or otherwise)
+%\item Efficient use of vector units: moving through memory in unit
+%stride, controlling memory alignment, controlling array strides,
+%annotation-assisted autovectorization
+%\item TODO: List of individual, concrete optimizations from above.
+%\end{itemize}
+%\item Mainstream linear algebra libraries (<examples> [citation]) are not
+%well-suited for solving large quantities of small non-linear
+%bandedish/banded/tridiagonal matrices on cache-coherent SIMD
+%architectures because <expalanation> [cite prior studies if possible].
+%\end{itemize}
+%
+%
+%\item Prediction: If our hypotheses are true, what results can we expect to
+%see? \\
+%$\rightarrow$ TODO: What performance characteristics should we see with and
+%without each of the concrete optimizations from our hypothesis above?
+%
+%\item Experiment: Investigate the predictions we've made. \\
+%$\rightarrow$ TODO: Methodology for benchmarking the optimizations identified
+%above and measuring the performance characteristics we're interested
+%in.
+%
+%\item Analysis: What were the results of our experiments?
+%\end{itemize}
+%
+%List of figures from meeting on 8/11:
+%For KNL, HSW, SNB(?)...
+%List of figures from meeting on 8/11:
+%-For KNL, HSW, SNB(?)...
+%\begin{enumerate}
+%\item Baseline performance using MKL (and hand) using i-major data layout 
+%(not vectorized)
+%\item Performance as a function of 32b RCP NR (not needed on KNL), stored
+%reciprocal (cuts divides in half) for fixed file size (4?)
+%\item Performance vs. Tile Size (jtile = 1,2,4,8,16,32)
+%\item Best Performance vs. MKL using same data layout vs. MKL using its best
+%(include DRAM BW limit)
+%\item Performance as a function of total parallelism for constant tile size
+%[optional time permitting]
+%\item Performance with 2,3,4 hyperthreads...  maybe just prose comments?
+%\item effect of kdim != pow(2)... maybe just prose comments?
+%\end{enumerate}
 
 
 \end{document}
