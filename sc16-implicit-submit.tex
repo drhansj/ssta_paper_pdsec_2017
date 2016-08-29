@@ -540,7 +540,10 @@ exploited. In the original \(ijk\) layout production code, a contiguous buffer
 was created to gather the non-contiguous column from the 3D grid, and the
 matrix was built on the fly for each column. Our NAMEFORALGO was designed from
 the ground up to both simultaneously build the matrix and simultaneously solve
-multiple columns. 
+multiple columns. It was evident that we would need to add a tiling abstraction
+to our implementation. While our un-tiled results beat the reference MKL
+results (see Figure \ref{}), they were well below the manufacturer-specified
+bandwidth and profiling made it clear that cache performance was the culprit.
 
 Due to the loop-carried dependencies in the Thomas algorithm, we could not tile
 the vertical dimension. Even if we could, this would be undesirable because the
@@ -640,7 +643,7 @@ NAMEFORALGO. This scheme offers better data contiguity than the alternate "tile
 both" scheme, however, we still end up with a non-contiguous tile.  The number
 of contiguous regions (and thus TLB entries) were quite large relative to
 hardware capabilities. Even worse, for smaller tile sizes, the size of each
-contiguous region accessed might be less than the smallest page size availble
+contiguous region accessed might be less than the smallest page size available
 on the microarchitectures we investigated (4KB in all cases). This would mean
 that for smaller tile sizes, we were not fully utilizing each TLB entry.  Our
 strategy for aligning and padding our arrays to avoid data cache conflicts
@@ -660,9 +663,7 @@ than a problem size that fit into the L2 cache because the former would make
 better use of TLB entries and exert less pressure on address translation
 hardware.
 
-Once we came to understand that the root of this problem was the non-contiguous
-nature of our tiles, we searched for a way to formulate a contiguous tiling
-scheme. We soon realized that the problem was that we had decided that the
+We soon realized that the problem was that we had decided that the
 vertical dimension \(k\) should have the greatest unit stride (e.g. \(ijk\)
 layout). However, we could not tile in the \(k\) for the same reason that we
 cannot vectorize in the \(k\) dimension; there are loop-carried dependencies in
@@ -670,15 +671,47 @@ the Thomas algorithm. Because we could not tile in \(k\) and \(k\) had the great
 stride, there was no way to subdivide our problem into contiguous tiles.
 Consider planar slices of a \(ijk\) layout grid. \(ij\) planes are contiguous
 (but require slicing in \(k\), which we cannot do), \(ik\) planes ("tile \(j\)"
-approach) are non-contiguous and \(jk\) planes are non-contiguous. 
- 
-% TODO: Talk about combining matrix build
+approach) are non-contiguous and \(jk\) planes are non-contiguous.
 
-% TODO: Discussion of data layout and tiling
+Once we realized that the \(ijk\) layout was restricting us to a non-optimal
+tiling scheme, we revisited the question of data layout in NAMEFORALGO.
+Originally, we had one requirement: one of the horizontal dimension should be
+the unit stride dimension so that we can vectorize in that direction. Now, we
+had a second requirement: the vertical dimension should not be have the
+greatest unit stride, because we cannot tile in the vertical dimension.
+Naturally, this led us to the \(ikj\) layout, where the horizontal dimension
+\(i\) is the unit stride dimension, the vertical dimension \(k\) has the next
+smallest stride and the horizontal dimension \(j\) has the greatest unit
+stride. We still use a "tile \(j\)" scheme, however, now our tiles are one
+contiguous region instead of a set of \(z\) planes.
+
+The change to the \(ikj\) layout produced the desire result. On Sandybridge,
+Ivybridge and Haswell, we saw a notable improvement in performance for smaller
+tile sizes (see Figure \ref{}). On these microarchitectures, the best result
+from the \(ikj\) layout variant matched or beat best result of the \(ijk\)
+layout using a smaller tile size which would fit into the L2 cache.
+\fix{DESCRIBE RESULTS}. On Knight's Landing, the impact was substantially
+larger (see Figure \ref{}). \fix{DESCRIBE RESULTS}. The difference in impact
+between the Intel Xeon architectures and Knight's Landing can be explained by
+the lack of a traditional L3 cache on the Knight's Landing. With the \(ijk\)
+layout on the KNL, the larger tile sizes which did not fit into the L2 cache would
+have to rely on the HBM cache. While the HBM on the KNL provides substantial
+bandwidth, when the HBM is configured to act as a last-level cache it provides
+higher latencies than the typical L3 cache on an Intel Xeon would. We believe
+this difference in cache latency explains the poorer performance relative to
+manufacturer-specified bandwidth of the \(ijk\) layout, and thus explains the
+more significant impact of the \(ikj\) layout on the KNL.
+
+\subsection{Mitigating Cache Conflicts}
+
+In addition to to data layout selection and tiling, it was necessary for us to
+mitigate potential data cache conflicts, to ensure optimal cache performance.
 
 % TODO: Talk about cache conflict resolution. 
 
-% Discussion of rolling matrix stuff
+% TODO: Talk about combining matrix build
+
+% TODO: Discussion of rolling matrix stuff
 
 %===========================================================================
 \section{Experimental Setup}
