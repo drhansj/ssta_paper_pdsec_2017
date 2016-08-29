@@ -288,8 +288,8 @@ vector. We will also solve for $u^{s+1}$ in-place, overwriting $u^{s}$ (so our
 system is $Au$).
 
 % Citation here is elementary numerical analysis
-The Thomas algorithm consists of two passes. First, a forward pass is performed
-to eliminate the $a_i$ elements~\cite{??}:
+The in-place Thomas algorithm consists of two passes. First, a forward pass is
+performed to eliminate the $a_i$ elements~\cite{??}:
 
 \begin{lstlisting}
 for (auto k = 1; k < n; ++k) {
@@ -312,7 +312,26 @@ for (auto k = n - 2 ; k >= 0; --k) {
 
 % TODO: Describe AI
 
-% TODO: Describe cached-divide algorithm
+% 1st Reference here is Intel Optimization Manual, 11.12
+% 2nd Reference here is the intrinsic manual
+When we analyzed implementations of the Thomas algorithm as described above, we
+observed that while the it is primary memory-limited, performance could be
+sensitive to the latency of the floating point divisons present in the
+algorithm. Vectorized floating point operations which use the division
+execution unit (divides, fast reciprocal estimation, square root) are not
+pipelined on many mainstream architectures, including Intel SSE, AVX and AVX2
+platforms~\cite{}. Thus, these operations have very high latency (43 cycles for
+an AVX 256-bit double-precision divide on Sandybridge; 35 cycles on Ivybridge
+and Haswell~\cite{}) and low throughput relative to other floating point
+operations such as multiplication and addition.
+
+In the in-place Thomas algorithm described above, all the division operations
+have the same divisor - the temporary coefficient computed and stored in the
+diagonal vector \(b\). If we re-formulate the algorithm to store the reciprocal
+of that coefficient instead of storing the coefficient itself, we are able to
+remove the division in the backwards substitution pass. We call this the
+\textbf{cached-divide} in-place Thomas algorithm. The forward elimination pass
+is:
 
 \begin{lstlisting}
 b[0] = 1.0 / b[0];
@@ -324,11 +343,62 @@ for (auto k = 1; k < n; ++k) {
 } 
 \end{lstlisting}
 
+The backwards substitution pass becomes:
+
 \begin{lstlisting}
 for (auto k = n - 2 ; k >= 0; --k) {
   u[k] = (u[k] - c[k] * u[k + 1]) * b[k];
 } 
 \end{lstlisting}
+
+% Discussion of the changes in AI.
+
+One well-known technique for optimizing floating point divisions is to replace
+division operations with fast reciprocal estimates (RCP) when possible. On many
+platforms where floating point division operations are not pipelined, floating
+point RCP operations will also not be pipelined, however they generally have
+much lower latency and higher throughput than division operations. Many
+optimizing compilers will transparently and reliable perform this optimization.
+However, there is a caveat on 256-bit AVX and AVX2 platforms (e.g. Sandybridge,
+Ivybridge, Haswell and Skylake); no double-precision RCP is available on these
+platforms, although a single-precision RCP instruction is available.
+
+% TODO: Probably give this a name.
+
+We experimented with the use of a single-precision RCP and Newton Raphson
+iteration to compute a fast division estimation. We are not aware of a compiler
+which provides optionally provides this optimization. To implement the
+optimization, we simply type cast the double-precision values to
+single-precision, perform a division operation, cast back to double-precision
+and then preform Newton Raphson iterations (at double precision). We rely on
+the compiler to replace the division with an RCP instruction.
+
+\begin{lstlisting}
+template <std::size_t NRIterations = 1>
+double nr_rcp_divide(double num, double den) {
+  double x = float(1.0) / float(den);
+
+  for (auto i = 0; i < NRIterations; ++i)
+    x = x + x * (1.0 - den * x);
+
+  return num * x;
+}
+\end{lstlisting}
+
+Since the single-precision RCP instruction will operate on twice as many values
+as a double-precision division from the same instruction set, when our division
+estimate is used in a vectorized loop it is prudent to unroll the loop at least
+once so that one single-precision RCP instruction can service two
+double-precision iterations. Again, we have been able to rely on the compiler
+to handle this component of the optimization.
+
+We do pay an overhead for the type conversion, in the form of packed-double to
+packed-single vector instructions. Additional double-precision multplications
+and additions are also needed, even with 0 Newton Raphson iterations.
+Section~\ref{} and Table~\ref{} discuss the performance of this division
+estimate and the tradeoff in accuracy.
+
+% TODO: Explain why this is sometimes slower.
 
 \subsection{Parallelization and Vectorization Strategy}
 
@@ -439,7 +509,9 @@ solves and that we could achieve substantially higher bandwidths by developing
 the solver described in this paper, we revisited the data layout question. As
 we would not be able to vectorize the Thomas algorithm in the vertical
 dimension due to the the loop-carried dependencies present in the algorithm, we
-decided to switch back to an \(ijk\) layout.
+decided to switch back to an \(ijk\) layout, where one horizontal dimension (\(i\))
+is the unit stride dimension and the vertical dimension (\(k\)) has the greatest
+stride.
 
 The next layout we investigated, the \(ikj\) layout, arose as a solution to
 translation lookaside buffer (TLB) performance issues that we encountered after
@@ -447,6 +519,72 @@ developing and studying a tiling abstraction for our solver. It is described in
 greater detail in the next section.
 
 \subsection{Tiling}
+
+To ensure good CPU cache utilization, it is often necessary to break a larger
+grid into smaller tiles which have greater data locality and can fit into a
+particular CPU cache. The Thomas algorithm is no exception. In particular, we
+want all four arrays (\(a\), \(b\), \(c\) and \(u\)) to remain in cache in
+between the forward elimination and the back substitution loops. Our analytical
+performance model is based on this assumption. If any of these four arrays need
+to be reloaded from main memory in between the forward elimination and back
+substitution loops, the amount of main memory data movement is significantly
+increased and the algorithmic intensity of the algorithm decreases notably. Of
+course, tiling also provides a useful abstraction for parallelization, as each
+tile can be computed independent of any other tiles and has no overlapping data
+accesses.
+
+The original production code which we worked with did not do any tiling. Since
+each column was solved by a LAPACK call, completely independent of any other
+columns, the improved data locality exposed by tiling could not be fully
+exploited. In the original \(ijk\) layout production code, a contiguous buffer
+was created to gather the non-contiguous column from the 3D grid, and the
+matrix was built on the fly for each column. Our NAMEFORALGO was designed from
+the ground up to both simultaneously build the matrix and simultaneously solve
+multiple columns. 
+
+Due to the loop-carried dependencies in the Thomas algorithm, we could not tile
+the vertical dimension. Even if we could, this would be undesirable because the
+vertical dimension is typically quite small \fix{HOW SMALL}. Thus, our tiling 
+abstraction would need to subdivide the horizontal \(ij\) plane.
+
+Our initial implementation used an \(ijk\) layout, where one of the horizontal
+dimensions (\(i\)) is the unit stride dimension, the other horizontal dimension
+(\(j\)) has the next smallest stride and the vertical dimension (\(k\)) has the
+greatest stride.
+
+We decided to only tile in one of the horizontal dimensions (\(j\), the
+non-unit stride horizontal dimension), to minimize the number of non-contiguous
+memory regions in each tile. Consider two different tiling regimes: the "tile
+both" approach subdivides both the \(i\) and \(j\) dimensions by \(x/2\), and
+the "tile \(j\)" approach subdivides only the \(j\) dimension by \(x/4\) (we
+assume here that \(y\) is divisible by \(x/2\) and thus can be neatly tiled in
+this manner). Both approaches create tiles of containing the same number of
+elements, and conceptually will fit into the same space in a data cache
+(\(x/2\)x\(x/2\)x\(z\) tiles for "tile both" and \(x\)x\(x/4\)x\(z\) tiles for
+"tile \(j\)"). However, the "tile \(j\)" approach has much greater data
+contiguity. For the "tile \(j\)" approach, we have \(z\) contiguous
+\(ij\)-planes, each containing \(x\)x\(x/4\) elements.  For the "tile both"
+approach, we have \((x/2)*z\) contiguous \(i\)-lines, each containing \(x/2\)
+elements.
+
+The greater contiguity of the "tile \(j\)" approach means fewer strided
+accesses and more importantly fewer translation lookaside buffer (TLB) entries
+needed per tile. In the worst case, assuming that each contiguous region of the
+tile can fit within a single TLB entry and that a single entry cannot cover
+multiple contiguous regions, the "tile both" case would take up \((x/2)*z\) TLB
+entries, while the "tile \(j\)" approach would only need \(z\) TLB entries.
+
+The only notable downside to the "tile \(j\)" approach versus the "tile both"
+approach is the loss of flexibility in tile sizes. The smallest tile size for
+the "tile \(j\)" approach is a \(x\)x\(1\)x\(z\) tile (a line of columns),
+while the smallest tile size for the "tile both" approach is a
+\(1\)x\(1\)x\(z\) tile (a single column). We do not believe this restriction is
+problematic. Because we are vectorizing in the \(i\) direction, it is assumed
+that the \(i\) dimension of a tile will be at least the size of the vector
+width of the target platform. In practice, our vectorizing compiler typically
+unrolls the loops in NAMEFORALGO after vectorization to amortize loop overheads
+and fully utilize the vector register file. Thus, we typically use 2 or 4 times
+the vector width as the minimum \(i\) dimension. 
 
 % TODO: Discussion of data layout and tiling
 
@@ -458,6 +596,8 @@ greater detail in the next section.
 Edison~\cite{Edison_website}, Cori, etc...
 Compilers
 Problem Size
+
+% Say something bold about relying on the compiler vectorizer
 
 \begin{itemize}
 \item 3x3 or 30x30 or 400x400
