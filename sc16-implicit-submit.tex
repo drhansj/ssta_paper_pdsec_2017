@@ -586,7 +586,97 @@ unrolls the loops in NAMEFORALGO after vectorization to amortize loop overheads
 and fully utilize the vector register file. Thus, we typically use 2 or 4 times
 the vector width as the minimum \(i\) dimension. 
 
+We used the \(ijk\) layout and the "tile \(j\)" scheme for much of our initial
+work. Part of our work was to study the effect of tile size on application
+performance.  Tile size controls both the data locality and the parallel grain
+size in our algorithm. Note that given the embarrassingly parallel nature of
+this problem, the effect of tile size on parallelism is well known, and thus
+are mostly outside of our consideration: tile sizes which are too small will
+perform poorly due to high parallel overheads (the "left side" of the
+traditional grain size parabola) and tile sizes which are too large will expose
+insufficient parallelism leading to starvation (the "right side" of the
+traditional grain size parabola)~\cite{some_parallex_thing}.
+
+To determine an optimal tile size, we performed parameter sweeps of the domain
+of tile sizes. We predicted four things:
+
+\begin{itemize}
+\item Tile sizes small enough to fit into the L1D cache would not be feasible
+because the overheads of loop constructs, parallelization and vectorization
+would be too great relative to the execution time of useful work per
+inner-iteration ("left side" effect). These tile sizes would either require
+smaller vertical dimensions than we use in the production application (\(k <
+16\)) or horizontal dimensions too small to vectorize efficiently (\(i < 16\)).
+\item There would be a drop in performance for tile sizes which were too large to fit into the L2 cache.
+\item There would be a drop in performance for tile sizes which were too large to fit into the L3 or HBM cache.
+\item Sufficiently large tile sizes would express insufficient parallelism and
+perform poorly due to starvation ("right side" effect).
+\end{itemize}
+
+Our predictions about tile sizes small enough to fit into the L1D cache held,
+as did our predictions about sufficiently large tile sizes. Additionally, as we
+expected, we saw a notable decrease in performance for tile sizes which were
+too large to fit into the L3 cache (see Figure \ref{}), although on
+microarchitectures with a shared L3 cache we did not see this effect in our
+single core results (see Figure \ref{}). Our 
+
+However we were intrigued to find that, across multiple microarchitectures, the
+tile size which gave the best performance was often a tile size which did
+\emph{not} fit into the L2 cache (see Figure \ref{}). The optimal tile size for
+the \(ijk\) layout version of NAMEFORALGO was usually either equal to or
+slightly larger than the size of the L2 (see Figure \ref{}). Note that if the
+tile size is equal to the size of the cache, we would not consider it to be
+small enough to fit in that cache, as we cannot reasonably expect perfect cache
+utilization or that our four arrays (\(a\), \(b\), \(c\) and \(u\)) will be the
+only data that needs to be stored in the cache. This result was surprising; we
+had expected a notable drop in performance for these tiles sizes because the
+arrays would need to be reloaded from the L3 cache (or the HBM cache in the
+case of the KNL) at the start of each loop in the kernel. 
+
+When profiling the code, we noticed poor TLB performance, and came to the
+realization that this was the cause of the problem. As we discussed earlier, we
+were using the "tile \(j\)" scheme with the \(ijk\) layout version of
+NAMEFORALGO. This scheme offers better data contiguity than the alternate "tile
+both" scheme, however, we still end up with a non-contiguous tile.  The number
+of contiguous regions (and thus TLB entries) were quite large relative to
+hardware capabilities. Even worse, for smaller tile sizes, the size of each
+contiguous region accessed might be less than the smallest page size availble
+on the microarchitectures we investigated (4KB in all cases). This would mean
+that for smaller tile sizes, we were not fully utilizing each TLB entry.  Our
+strategy for aligning and padding our arrays to avoid data cache conflicts
+(described in Section \ref{}), while effective, meant that it was almost
+guranteed that no two contiguous regions would reside on the same 4KB or 2MB
+page, amplifying the problem. We have not yet definitely determined whether
+huge pages (1GB) are being used in our benchmark via transparent huge page
+support~\cite{}, and, if not, whether huge pages would be to mitigate this
+effect.
+
+As an example of this issue, \fix{EXAMPLE FROM A FIGURE}.
+
+We concluded that as we decreased tile size, this TLB effect increasingly
+became the dominant driving performance factor. A problem size that fit into
+the L3 cache but did not fit into the L2 cache would have better performance
+than a problem size that fit into the L2 cache because the former would make
+better use of TLB entries and exert less pressure on address translation
+hardware.
+
+Once we came to understand that the root of this problem was the non-contiguous
+nature of our tiles, we searched for a way to formulate a contiguous tiling
+scheme. We soon realized that the problem was that we had decided that the
+vertical dimension \(k\) should have the greatest unit stride (e.g. \(ijk\)
+layout). However, we could not tile in the \(k\) for the same reason that we
+cannot vectorize in the \(k\) dimension; there are loop-carried dependencies in
+the Thomas algorithm. Because we could not tile in \(k\) and \(k\) had the greatest
+stride, there was no way to subdivide our problem into contiguous tiles.
+Consider planar slices of a \(ijk\) layout grid. \(ij\) planes are contiguous
+(but require slicing in \(k\), which we cannot do), \(ik\) planes ("tile \(j\)"
+approach) are non-contiguous and \(jk\) planes are non-contiguous. 
+ 
+% TODO: Talk about combining matrix build
+
 % TODO: Discussion of data layout and tiling
+
+% TODO: Talk about cache conflict resolution. 
 
 % Discussion of rolling matrix stuff
 
