@@ -321,7 +321,7 @@ algorithm. Vectorized floating point operations which use the division
 execution unit (divides, fast reciprocal estimation, square root) are not
 pipelined on many mainstream architectures, including Intel SSE, AVX and AVX2
 platforms~\cite{}. Thus, these operations have very high latency (43 cycles for
-an AVX 256-bit double-precision divide on Sandybridge; 35 cycles on Ivybridge
+an AVX 256-bit double-precision divide on Sandy Bridge; 35 cycles on Ivy Bridge
 and Haswell~\cite{}) and low throughput relative to other floating point
 operations such as multiplication and addition.
 
@@ -360,7 +360,7 @@ point RCP operations will also not be pipelined, however they generally have
 much lower latency and higher throughput than division operations. Many
 optimizing compilers will transparently and reliable perform this optimization.
 However, there is a caveat on 256-bit AVX and AVX2 platforms (e.g. Sandybridge,
-Ivybridge, Haswell and Skylake); no double-precision RCP is available on these
+Ivy Bridge, Haswell and Skylake); no double-precision RCP is available on these
 platforms, although a single-precision RCP instruction is available.
 
 % TODO: Probably give this a name.
@@ -519,6 +519,8 @@ developing and studying a tiling abstraction for our solver. It is described in
 greater detail in the next section.
 
 \subsection{Tiling}
+
+\fix{Elaborate on distinction between entire tile/per array tile.}
 
 To ensure good CPU cache utilization, it is often necessary to break a larger
 grid into smaller tiles which have greater data locality and can fit into a
@@ -686,8 +688,10 @@ smallest stride and the horizontal dimension \(j\) has the greatest unit
 stride. We still use a "tile \(j\)" scheme, however, now our tiles are one
 contiguous region instead of a set of \(z\) planes.
 
+\fix{Interesting decision between ikj iteration vs ijk iteration in the ikj layout. May want to talk about that.}
+
 The change to the \(ikj\) layout produced the desire result. On Sandybridge,
-Ivybridge and Haswell, we saw a notable improvement in performance for smaller
+Ivy Bridge and Haswell, we saw a notable improvement in performance for smaller
 tile sizes (see Figure \ref{}). On these microarchitectures, the best result
 from the \(ikj\) layout variant matched or beat best result of the \(ijk\)
 layout using a smaller tile size which would fit into the L2 cache.
@@ -752,6 +756,9 @@ BytesPerWay [Bytes / Way] = CacheSize [Bytes] / Associativity [Ways]
 
 \[
 L1DArrayAlignStep [Bytes] = L1DBytesPerWay [Bytes / Way] / 4 [\# of Arrays]
+\]
+
+\[
 L2ArrayAlignStep [Bytes]  = L2BytesPerWay [Bytes / Way]  / 4 [\# of Arrays]
 \]
 
@@ -781,6 +788,9 @@ i + nx * j + (nx * ny + PlanePadding) * k
 
 \[
 L1DPlanePadding [Bytes] = L1DBytesPerWay [Bytes / Way] / nz [\# of Vertical Levels]
+\]
+
+\[
 L2PlanePadding [Bytes]  = L2BytesPerWay [Bytes / Way]  / nz [\# of Vertical Levels]
 \]
 
@@ -843,41 +853,151 @@ at the end of each horizontal \(i\) line).
 Additionally, we were concerned that the use of \(LinePadding\) might disrupt
 hardware prefetching. In the \(ijk\) layout, we iterate through contiguous
 horizontal \(ij\) planes (with extent \(nx*ny\)), then jump to next plane which
-is in cache but not contiguous with the current plane (skipping over other
+is in cache but not contiguous with the prior plane (skipping over other
 tiles and \(PlanePadding\) pad elements).
 
-In the \(ikj\) layout, we iterate through contiguous \fix{TODO}
+% NOTE: This paragraph assumes that ikj iteration is the correct choice for the
+% ikj layout, which is not something I've actually investigated because I
+% didn't realize it until I started writing this.
+In the \(ikj\) layout, we iterate through contiguous horizontal \(i\) lines
+(with extent \(nx\)), then we go to the line at the next vertical level which
+is in cache and contiguous with the prior line. Adding \(LinePadding\) would
+mean that we would have to skip over those padding elements at the end of each
+horizontal \(i\) line. This might cause prefetching problems as we would no
+longer be streaming through memory contiguously.
 
-% TODO: Interesting decision between ikj iteration vs ijk iteration in the ikj
-% layout. May want to talk about that.
-
-% TODO: Elaborate on distinction between entire tile/per array tile.
+We have not yet fully explored the impact of \(LinePadding\) in the \(ikj\)
+versions of NAMEFORALGO. Currently, NAMEFORALGO does not have any mitigation
+mechanism for L1D vertical conflicts. In profiling, we have observed L1D cache
+misses on element accesses on adjacent levels (e.g. \(u[i-1], b[i-1]\)). These
+may be due to L1D vertical conflicts, although they could also be explained by
+insufficient hardware prefetching. We intend to investigate this effect and the
+impact of \(LinePadding\) in the future.
 
 % TODO: Talk about cache conflict resolution. 
 
-% TODO: Talk about combining matrix build
-
-% TODO: Discussion of rolling matrix stuff
 
 %===========================================================================
 \section{Experimental Setup}
-\fix{Bryce to write}
-Edison~\cite{Edison_website}, Cori, etc...
-Compilers
-Problem Size
+\fix{Rename the Github repo from tridiagonal\_solve\_benchmarks to tridiagonal\_solve\_benchmark}
+The software described in this paper is known as the Tridiagonal Solve
+Benchmark (TSB). TSB is freely available on Github under the Boost Software
+License, version 1.0. Revision WHATEVER contains the source code used for the
+experiments in this paper.
+
+TSB currently targets x86-64 microarchitectures with support for the AVX vector
+extensions running POSIX-compliant operating systems. It is written in ISO
+C++14 and has no external software dependencies. The code contains no vector
+intrinsics or vector assembly. We rely entirely on the compiler vectorization
+engine for correct vector code generation, utilizing compiler hints to indicate
+alignment, loop trip count and aliasing assumptions. Avoiding vector intrinsics
+and hand-written assembly makes TSB portable between different x86-64 vector
+instruction sets (SSE, AVX, AVX2, AVX512). It also leads to better code by
+giving the compiler the freedom to select the correct instructions and perform
+optimizations which we have found to be inhibited by explicit vector
+intrinsics, such as post-vectorization loop unrolling. We manually inspect the
+compiler-generated assembly to verify that our assumptions about the
+compiler-programmer contract are being upheld.
+
+A compliant optimizing and vectorizing C++14 compiler is required to build the
+software. Currently only the Intel C++ Compiler is supported. Other C++14
+compilers should work with minor modifications. The only non-standard features
+used are POSIX APIs (memory allocation and environmental variable retrieval),
+the \lstinline{__builtin_assume()} intrinsic, the
+\lstinline{__builtin_assume_aligned()} intrinsic, the \lstinline{__restrict__}
+type qualifier and the GCC-style attribute
+\lstinline{__attribute__((always_inline))}. 
+
+Version X of the Intel C++ Compiler or later should be used. Version Y was used
+to compile the binaries which were used to produce the results in this paper.
+Version Z is known to correctly compile the code, however limitations in the
+vectorization engine cause unnecessary remainder loops to be generated. Usage
+of an older version of the Intel C++ Compiler may cause sub-optimal code
+generation which degrades the performance of the benchmark.
+
+\begin{table}
+\centering
+\caption{\textbf{x86-64 Test Platforms:}}
+\begin{tabular}{|c|c|c|c|} \hline
+\textbf{System Name}     & \textbf{Edison}          & \textbf{Cori}            & \textbf{Carl}             \\ \hline
+Model                    & Intel Xeon E5-2695 v2    & Intel Xeon E5-2698 v3    & Intel Xeon Phi 7210       \\ \hline
+Microarchitecture        & Ivy Bridge               & Haswell                  & Knight's Landing          \\ \hline
+Vector Instruction Set   & AVX                      & AVX2                     & AVX512                    \\ \hline
+CPU Clock Frequency      & 2.4 GHz (3.2 GHz Turbo)  & 2.3 GHz (3.6 GHz Turbo)  & 1.3 GHz (1.5 GHz Turbo)   \\ \hline
+Processing Units (Cores) & 12                       & 16                       & 64                        \\ \hline
+Hardware Threading       & 2-way                    & 2-way                    & 4-way                     \\ \hline
+L1D Cache                & 32KB 8-way               & 32KB 8-way               & 32KB 8-way                \\
+                         & (local to each core)     & (local to each core)     & (local to each core)      \\ \hline
+L2 Cache                 & 256KB 8-way              & 256KB 8-way              & 1024KB 16-way; 512KB/core \\
+                         & (local to each core)     & (local to each core)     & (shared by 2 cores)       \\ \hline
+L3 Cache                 & \fix{hwloc}              & \fix{hwloc}              & \fix{hwloc}               \\ \hline
+TLB                      & \fix{TODO}               & \fix{TODO}               & \fix{TODO}                \\ \hline
+Memory                   & \fix{TODO}               & \fix{TODO}               & \fix{TODO}                \\ \hline
+\end{tabular}
+\label{tab:test_platforms}
+\end{table}
 
 % Say something bold about relying on the compiler vectorizer
 
-\begin{itemize}
-\item 3x3 or 30x30 or 400x400
-\item Vectorized vs. MKL / non-vectorized
-\item Mixed precision
-\item Tiled (experiment for non-tiled code blowing out cache)
-\end{itemize}
-
 %===========================================================================
-\section{Results and Analysis}
-\fix{Bryce to write}
+\section{Results}
+
+\begin{figure}%[thbp]
+\centering
+\caption{\textbf{Tile Size vs Bandwidth on Ivy Bridge:}}
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+Line graph, with vertical lines for cache sizes and a horizontal line for pin bandwidth.
+Shows both ijk and ikj layout, demonstrates the TLB issue described in the tiling section.
+For the ikj layout, demonstrates the five predictions we make in the tiling section.
+1 Socket worth of cores, sweep minimum feasible tile size to something past L3 size.
+\end{figure}
+
+\begin{figure}%[thbp]
+\centering
+\caption{\textbf{Tile Size vs Bandwidth on Haswell:}}
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+Line graph, with vertical lines for cache sizes and a horizontal line for pin bandwidth.
+Shows both ijk and ikj layout, demonstrates the TLB issue described in the tiling section.
+For the ikj layout, demonstrates the five predictions we make in the tiling section.
+1 Socket worth of cores, sweep minimum feasible tile size to something past L3 size.
+\end{figure}
+
+\begin{figure}%[thbp]
+\centering
+\caption{\textbf{Tile Size vs Bandwidth on Knight's Landing:}}
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+Line graph, with vertical lines for cache sizes and a horizontal line for pin bandwidth.
+Shows both ijk and ikj layout, demonstrates the TLB issue described in the tiling section.
+For the ikj layout, demonstrates the five predictions we make in the tiling section.
+1 Socket worth of cores, sweep minimum feasible tile size to something past L3 size.
+\end{figure}
+
+\begin{figure}%[thbp]
+\centering
+\caption{\textbf{Performance Impact of Optimizations on Ivy Bridge:}}
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+Bar graph, left to right: MKL, NAMEFORALGO, pin bandwidth
+For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitigation, +mitigation, +tiling, +cached-div, +ikj
+1 Socket worth of cores
+\end{figure}
+
+\begin{figure}%[thbp]
+\centering
+\caption{\textbf{Performance Impact of Optimizations on Haswell:}}
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+Bar graph, left to right: MKL, NAMEFORALGO, pin bandwidth
+For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitigation, +mitigation, +tiling, +cached-div, +ikj
+1 Socket worth of cores
+\end{figure}
+
+\begin{figure}%[thbp]
+\centering
+\caption{\textbf{Performance Impact of Optimizations on Knight's Landing:}}
+\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+Bar graph, left to right: MKL, NAMEFORALGO, pin bandwidth
+For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitigation, +mitigation, +tiling, +cached-div, +ikj
+1 Socket worth of cores
+\end{figure}
 
 %\begin{table}%[htbp]
 %\center
@@ -958,60 +1078,66 @@ Problem Size
 %effect of kdim != pow(2)... maybe just prose comments?  }
 %\end{figure}
 
-\begin{figure}%[thbp]
-\centering
-\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_snb_e5_2670_08_21_2016_8pus.pdf}
-\caption{\textbf{Tile Size vs Bandwidth on Sandybridge:}
-Measured bandwidth of the tridiagonal solve as a function of tile size on
-an Intel Xeon E5-2670 processor. The benchmark was run with 8 threads (each mapped
-to a single core of the CPU) and a 7.8 GB problem size. 190 sample runs were
-collected.}
-\end{figure}
-
-\begin{figure}%[thbp]
-\centering
-\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_ivb_e5_2695_v2_08_21_2016_12pus.pdf}
-\caption{\textbf{Tile Size vs Bandwidth on Ivybridge:}
-Measured bandwidth of the tridiagonal solve as a function of tile size on
-an Intel Xeon E5-2695 V2 processor. The benchmark was run with 12 threads (each
-mapped to a single core of the CPU) and a 7.8 GB problem size. 160 sample runs
-were collected.}
-\end{figure}
-
-\begin{figure}%[thbp]
-\centering
-\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_hsw_e5_2670_v3_08_21_2016_12pus.pdf}
-\caption{\textbf{Tile Size vs Bandwidth on Haswell:}
-Measured bandwidth of the tridiagonal solve as a function of tile size on
-an Intel Xeon E5-2670 V3 processor. The benchmark was run with 12 threads (each
-mapped to a single core of the CPU) and a 7.8 GB problem size. 190 sample runs
-were collected.}
-\end{figure}
-
-\begin{figure}%[thbp]
-\centering
-\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_knl_7210_08_21_2016_64pus.pdf}
-\caption{\textbf{Tile Size vs Bandwidth on Knight's Landing:}
-Measured bandwidth of the tridiagonal solve as a function of tile size on
-an Intel Xeon Phi 7210 processor. The benchmark was run with 64 threads (each
-mapped to a single core of the CPU) and a 3.9 GB problem size. 130 sample runs
-were collected. The processor was configured in the "quadcache" mode, where the
-16GB high-bandwidth memory is configured as a data cache.}
-\end{figure}
+%\begin{figure}%[thbp]
+%\centering
+%\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_snb_e5_2670_08_21_2016_8pus.pdf}
+%\caption{\textbf{Tile Size vs Bandwidth on Sandybridge:}
+%Measured bandwidth of the tridiagonal solve as a function of tile size on
+%an Intel Xeon E5-2670 processor. The benchmark was run with 8 threads (each mapped
+%to a single core of the CPU) and a 7.8 GB problem size. 190 sample runs were
+%collected.}
+%\end{figure}
+%
+%\begin{figure}%[thbp]
+%\centering
+%\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_ivb_e5_2695_v2_08_21_2016_12pus.pdf}
+%\caption{\textbf{Tile Size vs Bandwidth on Ivybridge:}
+%Measured bandwidth of the tridiagonal solve as a function of tile size on
+%an Intel Xeon E5-2695 V2 processor. The benchmark was run with 12 threads (each
+%mapped to a single core of the CPU) and a 7.8 GB problem size. 160 sample runs
+%were collected.}
+%\end{figure}
+%
+%\begin{figure}%[thbp]
+%\centering
+%\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_hsw_e5_2670_v3_08_21_2016_12pus.pdf}
+%\caption{\textbf{Tile Size vs Bandwidth on Haswell:}
+%Measured bandwidth of the tridiagonal solve as a function of tile size on
+%an Intel Xeon E5-2670 V3 processor. The benchmark was run with 12 threads (each
+%mapped to a single core of the CPU) and a 7.8 GB problem size. 190 sample runs
+%were collected.}
+%\end{figure}
+%
+%\begin{figure}%[thbp]
+%\centering
+%\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_knl_7210_08_21_2016_64pus.pdf}
+%\caption{\textbf{Tile Size vs Bandwidth on Knight's Landing:}
+%Measured bandwidth of the tridiagonal solve as a function of tile size on
+%an Intel Xeon Phi 7210 processor. The benchmark was run with 64 threads (each
+%mapped to a single core of the CPU) and a 3.9 GB problem size. 130 sample runs
+%were collected. The processor was configured in the "quadcache" mode, where the
+%16GB high-bandwidth memory is configured as a data cache.}
+%\end{figure}
 
 %===========================================================================
 \section{Conclusion}
 \fix{Bryce to write}
-The conclusion goes here.
 
+\section{Future Work}
+
+\fix{Talk about combining matrix build}
+
+\fix{Discussion of rolling matrix stuff}
 
 %===========================================================================
 \section*{Acknowledgments}
 \fix{Comment this section out before submitting... Reformat before finalizing...}
 \fix{Intel IPCC ack, too}
 
-This research used resources in Lawrence Berkeley National Laboratory and the National Energy Research Scientific Computing Center, which are supported by the U.S. Department of Energy Office of Science's Advanced Scientific Computing Research program under contract number DE-AC02-05CH11231.  
 This material is based upon work supported by the U.S. Department of Energy, Office of Science, Advanced Scientific Computing Research, Scientific Discovery through Advanced Computing (SciDAC) program.
+This research used resources in Lawrence Berkeley National Laboratory and the National Energy Research Scientific Computing Center, which are supported by the U.S. Department of Energy Office of Science's Advanced Scientific Computing Research program under contract number DE-AC02-05CH11231.  
+This research used resources in Louisiana State University's Center for Computation and Technology. \fix{CHECK WITH ADRIAN ON WORDING}
+
 %This research used resources of the National Energy Research Scientific Computing Center (NERSC), which is supported by the Office of Science of the U.S. Department of Energy under contract DE-AC02-05CH11231.
 %This research used resources of the Argonne Leadership Computing Facility at Argonne National Laboratory, which is supported by the Office of Science of the U.S. Department of Energy under contract DE-AC02-06CH11357.
 %This research used resources of the Oak Ridge Leadership Facility at the Oak Ridge National Laboratory, which is supported by the Office of Science of the U.S. Department of Energy under Contract No. DE-AC05-00OR22725.
