@@ -13,7 +13,7 @@
 
 %===========================================================================
 \usepackage{listings}
-\lstloadlanguages{C++,Pascal}
+\lstloadlanguages{C++}
 
 % Settings for the lstlistings environment
 \lstset{
@@ -59,9 +59,18 @@ xleftmargin=0.1cm,
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage{amsfonts}
-\usepackage{hyperref}
+\usepackage[hidelinks]{hyperref}
 \usepackage{cite}
-\newcommand{\fix}[1]{{\bf \textcolor {red}{#1}}}
+
+\usepackage{fixme}
+\fxusetheme{color}
+\fxsetup{
+    status=draft,
+    author=,
+    layout=inline, % also try footnote or pdfnote
+    theme=color
+}
+
 %===========================================================================
 \begin{document}
 \title{Solving Large Quantities of Small Matrix Problems on Cache-Coherent SIMD Architectures}
@@ -71,7 +80,7 @@ xleftmargin=0.1cm,
 % use a multiple column layout for up to three different
 % affiliations
 \author{
-\IEEEauthorblockN{Bryce Lelbach, Hans Johansen, and Samuel Williams}
+\IEEEauthorblockN{Bryce Adelstein Lelbach, Hans Johansen, and Samuel Williams}
 \IEEEauthorblockA{Computational Research Division, Lawrence Berkeley National Laboratory, Berkeley, CA 94720\\ {\it \{balelbach, hjohansen, swwilliams\}@lbl.gov}}
 %\and
 %\IEEEauthorblockN{Homer Simpson}
@@ -226,7 +235,7 @@ In many cases, there is a benefit from vectorization and thread parallelism,
   partially vectorized ``peel'' loops, etc.~\cite{??}.
 Some specialized approaches include specialized linear algebra-specific 
   compilers for small problem sizes and target architectures 
- ~\cite{Spampinato:2014, ??} \fix{(add build-to-order ref, Siek/Jessup?)}.
+ ~\cite{Spampinato:2014, ??} \fxnote{(add build-to-order ref, Siek/Jessup?)}.
 Other libraries like 
   \emph{Blaze}~\cite{BlazeSite}, 
   \emph{PLASMA}~\cite{PLASMASite},
@@ -239,11 +248,10 @@ Overall, there is a gap in approaches that both have vectorization,
   assumptions, amortizing factorization across multiple right-hand-sides, 
   and other assumptions.
 \\
-\fix{(Hans - fill in more background / details on these.)}
+\fxnote{(Hans - fill in more background / details on these.)}
 
 %===========================================================================
 \section{Implementation}
-\fix{Bryce to write}
 
 Suppose we have a symmetric positive-definite or diagonally-dominant $n$x$n$
 tridiagonal matrix $A$ and two $n$-element vectors $u^{s}$ and $u^{s+1}$. We
@@ -310,7 +318,7 @@ for (auto k = n - 2 ; k >= 0; --k) {
 } 
 \end{lstlisting}
 
-% TODO: Describe AI
+\fxnote{Paragraph describing AI}
 
 % 1st Reference here is Intel Optimization Manual, 11.12
 % 2nd Reference here is the intrinsic manual
@@ -351,7 +359,7 @@ for (auto k = n - 2 ; k >= 0; --k) {
 } 
 \end{lstlisting}
 
-% Discussion of the changes in AI.
+\fxnote{Paragraph discussing the changes in AI with cached variant}
 
 One well-known technique for optimizing floating point divisions is to replace
 division operations with fast reciprocal estimates (RCP) when possible. On many
@@ -398,7 +406,7 @@ and additions are also needed, even with 0 Newton Raphson iterations.
 Section~\ref{} and Table~\ref{} discuss the performance of this division
 estimate and the tradeoff in accuracy.
 
-% TODO: Explain why this is sometimes slower.
+\fxnote{Paragraph explaining why we're not actually doing this.}
 
 \subsection{Parallelization and Vectorization Strategy}
 
@@ -450,12 +458,11 @@ The innermost loop can be vectorized, the innermost loop can be unrolled and
 the next-innermost loop can be vectorized, or the two innermost loops can be
 collapsed and vectorized.
 
-% TODO: Explain that the independent solve approach is what LAPACK does, and
-% that's why it is insufficient for this type of problem. Also, explain that
-% LAPACK has no routine for Thomas-style tridiagonal solves - dgtsv is
-% generalized, does actual Gaussian eliminiation and may do pivoting.
-
-% Also mention somewhere that MKL does not parallelize dgtsv.
+\fxnote{TODO: Explain that the independent solve approach is what LAPACK does,
+and that's why it is insufficient for this type of problem. Also, explain that
+LAPACK has no routine for Thomas-style tridiagonal solves - dgtsv is
+generalized, does actual Gaussian eliminiation and may do pivoting. Also
+mention somewhere that MKL does not parallelize dgtsv.}
 
 The vector parallelism exposed by the simultaneous approach offers a major
 benefit over the independent approach, since it is not possible to vectorize
@@ -463,7 +470,7 @@ most of the kernels in the independent approach due to data dependencies
 between iterations of the Thomas algorithm. Even if it was possible to
 vectorize in the vertical $nz$ dimension, it would still be undesirable to do
 so. The extent of the vertical dimension tends to be very small in the
-applications we are concerned with\fix{HOW SMALL}. Vectorizing in the
+applications we are concerned with\fxnote{HOW SMALL}. Vectorizing in the
 horizontal dimensions allows us to control locality and loop trip counts via
 tiling.
 
@@ -520,7 +527,7 @@ greater detail in the next section.
 
 \subsection{Tiling}
 
-\fix{Elaborate on distinction between entire tile/per array tile.}
+\fxnote{Elaborate on distinction between entire tile/per array tile.}
 
 To ensure good CPU cache utilization, it is often necessary to break a larger
 grid into smaller tiles which have greater data locality and can fit into a
@@ -549,7 +556,7 @@ bandwidth and profiling made it clear that cache performance was the culprit.
 
 Due to the loop-carried dependencies in the Thomas algorithm, we could not tile
 the vertical dimension. Even if we could, this would be undesirable because the
-vertical dimension is typically quite small \fix{HOW SMALL}. Thus, our tiling 
+vertical dimension is typically quite small \fxnote{HOW SMALL}. Thus, our tiling 
 abstraction would need to subdivide the horizontal \(ij\) plane.
 
 Our initial implementation used an \(ijk\) layout, where one of the horizontal
@@ -657,7 +664,7 @@ huge pages (1GB) are being used in our benchmark via transparent huge page
 support~\cite{}, and, if not, whether huge pages would be to mitigate this
 effect.
 
-As an example of this issue, \fix{EXAMPLE FROM A FIGURE}.
+As an example of this issue, \fxnote{EXAMPLE FROM A FIGURE}.
 
 We concluded that as we decreased tile size, this TLB effect increasingly
 became the dominant driving performance factor. A problem size that fit into
@@ -688,15 +695,15 @@ smallest stride and the horizontal dimension \(j\) has the greatest unit
 stride. We still use a "tile \(j\)" scheme, however, now our tiles are one
 contiguous region instead of a set of \(z\) planes.
 
-\fix{Interesting decision between ikj iteration vs ijk iteration in the ikj layout. May want to talk about that.}
+\fxnote{Interesting decision between ikj iteration vs ijk iteration in the ikj layout. May want to talk about that.}
 
 The change to the \(ikj\) layout produced the desire result. On Sandybridge,
 Ivy Bridge and Haswell, we saw a notable improvement in performance for smaller
 tile sizes (see Figure \ref{}). On these microarchitectures, the best result
 from the \(ikj\) layout variant matched or beat best result of the \(ijk\)
 layout using a smaller tile size which would fit into the L2 cache.
-\fix{DESCRIBE RESULTS}. On Knight's Landing, the impact was substantially
-larger (see Figure \ref{}). \fix{DESCRIBE RESULTS}. The difference in impact
+\fxnote{DESCRIBE RESULTS}. On Knight's Landing, the impact was substantially
+larger (see Figure \ref{}). \fxnote{DESCRIBE RESULTS}. The difference in impact
 between the Intel Xeon architectures and Knight's Landing can be explained by
 the lack of a traditional L3 cache on the Knight's Landing. With the \(ijk\)
 layout on the KNL, the larger tile sizes which did not fit into the L2 cache would
@@ -731,9 +738,45 @@ NAMEFORALGO to be small enough to fit into the L2 cache, so our cache conflict
 considerations only account for L1D and L2 cache conflict misses. Note the
 formula for the size of a set-associative cache (brackets denote units):
 
-\[
-CacheSize [Bytes] = Associativity [\# of Ways] * CacheLineSize [Bytes] * NumberOfSets
-\]
+\begin{table*}[t]
+\centering
+\caption{\textbf{Formulae for Cache Conflict Mitigation Parameters:}}
+
+\begin{align*}
+CacheSize \: \text{[Bytes]} = Associativity \: \text{[Ways]} * CacheLineSize \: \text{[Bytes]} * NumberOfSets \: \text{[Sets]}
+\end{align*}
+
+\begin{align*}
+BytesPerWay \: \text{[Bytes / Way]} = CacheSize \: \text{[Bytes]} / Associativity \: \text{[Ways]}
+\end{align*}
+
+\begin{align*}
+L1DArrayAlignStep \: \text{[Bytes]} &= L1DBytesPerWay \: \text{[Bytes / Way]} \: / \: 4 \: \text{[Arrays]} \\
+L2ArrayAlignStep \: \text{[Bytes]}  &= L2BytesPerWay \: \text{[Bytes / Way]}  \: / \: 4 \: \text{[Arrays]} \\ 
+ArrayAlignStep \: \text{[Bytes]}    &= L1DArrayAlignStep \: \text{[Bytes]} + L2ArrayAlignStep \: \text{[Bytes]}
+\end{align*}
+
+\begin{align*}
+L1DPlanePadding \: \text{[Bytes]} &= L1DBytesPerWay \: \text{[Bytes / Way]} \: / \: nz \: \text{[\# of Vertical Levels]} \\ 
+L2PlanePadding \: \text{[Bytes]}  &= L2BytesPerWay \: \text{[Bytes / Way]}  \: / \: nz \: \text{[\# of Vertical Levels]} \\
+PlanePadding \: \text{[Bytes]}    &= L1DPlanePadding \: \text{[Bytes]} + L2PlanePadding \: \text{[Bytes]}
+\end{align*}
+
+\begin{align*}
+LinePadding \: \text{[Bytes]} = L1DBytesPerWay \: \text{[Bytes / Way]} \: / \: nz \: \text{[\# of Vertical Levels]}
+\end{align*}
+
+\label{tab:conflict_mitigation_formulae}
+\end{table*}
+
+\begin{table*}[t]
+\centering
+\caption{\textbf{Example Cache Conflict Mitigation Parameters}}
+
+\fxnote{TODO}
+
+\label{tab:example_conflict_mitigation_parameters}
+\end{table*}
 
 To deal conflicts between elements of different arrays with the same
 \(ijk\) indices, we align the base of each array differently. Assuming that all
@@ -748,23 +791,8 @@ where \(nA\) is \(0\) for \(u\), \(1\) for \(a\), \(2\) for \(b\) and \(3\) for
 \(ArrayBaseAlign\) should be a power of 2; 1MB is used for all the results
 presented in this paper. \(ArrayAlignStep\) is the sum of two values,
 \(L1DArrayAlignStep\) and \(L2ArrayAlignStep\), which are computed based on the
-properties of the L1D and L2 caches on the target microarchitecture:
-
-\[
-BytesPerWay [Bytes / Way] = CacheSize [Bytes] / Associativity [Ways]
-\]
-
-\[
-L1DArrayAlignStep [Bytes] = L1DBytesPerWay [Bytes / Way] / 4 [\# of Arrays]
-\]
-
-\[
-L2ArrayAlignStep [Bytes]  = L2BytesPerWay [Bytes / Way]  / 4 [\# of Arrays]
-\]
-
-\[
-ArrayAlignStep [Bytes] = L1DArrayAlignStep [Bytes] + L2ArrayAlignStep [Bytes]
-\]
+properties of the L1D and L2 caches on the target microarchitecture. The formulae
+are shown in Table \ref{tab:conflict_mitigation_formulae}. 
 
 To address conflicts between elements of the same array which have the same
 \(ij\) indices but reside on two separate, adjacent vertical levels, our
@@ -778,28 +806,17 @@ e.g. the indexing formula changes from:
 i + nx * j + nx * ny * k
 \]
 
-to:
+\noindent to:
 
 \[
 i + nx * j + (nx * ny + PlanePadding) * k
 \]
 
-\(PlanePadding\) is calculated similar to \(ArrayAlignStep\):
-
-\[
-L1DPlanePadding [Bytes] = L1DBytesPerWay [Bytes / Way] / nz [\# of Vertical Levels]
-\]
-
-\[
-L2PlanePadding [Bytes]  = L2BytesPerWay [Bytes / Way]  / nz [\# of Vertical Levels]
-\]
-
-\[
-PlanePadding [Bytes] = L1DPlanePadding [Bytes] + L2PlanePadding [Bytes]
-\]
+\noindent \(PlanePadding\) is calculated similar to \(ArrayAlignStep\) (Table \ref{tab:conflict_mitigation_formulae}).
 
 We have found that the storage overhead of \(PlanePadding\) (shown below in
-Table \ref{}) is relatively small for non-trivial problems. \fix{IS THIS TRUE?}
+Table \ref{tab:example_conflict_mitigation_parameters}) is relatively small for
+non-trivial problems. \fxnote{IS THIS TRUE?}
 
 A similar approach could be used to deal with these vertical cache conflicts
 when using the \(ikj\) layout. Instead of adding \(PlanePadding\), we would add
@@ -823,11 +840,8 @@ three arrays. We should not need to do anything to address L2 vertical
 conflicts for the \(ikj\) layout. Because all the elements are contiguous in
 memory and the per-array tile will fit into the L2, the addresses of the
 elements should already be well-distributed across the sets of the L2 cache.
-\(LinePadding\) only needs to consider L1D vertical conflicts:
-
-\[
-LinePadding [Bytes] = L1DBytesPerWay [Bytes / Way] / nz [\# of Vertical Levels]
-\]
+\(LinePadding\) only needs to consider L1D vertical conflicts. The formula for
+\(LinePadding\) is given in Table \ref{tab:conflict_mitigation_formulae}.
 
 However, there are downsides to applying this technique to the \(ikj\) layout.
 Firstly, \(LinePadding\) will increase the size of the contiguous per-array
@@ -846,7 +860,7 @@ NAMEFORALGO.
 An example might be illustrative. \(PlanePadding\) for the \(ijk\) layout adds
 \(nz\) contiguous regions containing \(PlanePadding\) padding elements (one region
 at the end of each horizontal \(ij\) plane). Recall that the vertical extent, \(nz\), 
-is typically small \fix{HOW SMALL}. \(LinePadding\) for the \(ikj\) layout adds
+is typically small \fxnote{HOW SMALL}. \(LinePadding\) for the \(ikj\) layout adds
 \(nx*nz\) contiguous regions containing \(LinePadding\) padding elements (one region
 at the end of each horizontal \(i\) line).
 
@@ -859,12 +873,14 @@ tiles and \(PlanePadding\) pad elements).
 % NOTE: This paragraph assumes that ikj iteration is the correct choice for the
 % ikj layout, which is not something I've actually investigated because I
 % didn't realize it until I started writing this.
-In the \(ikj\) layout, we iterate through contiguous horizontal \(i\) lines
-(with extent \(nx\)), then we go to the line at the next vertical level which
-is in cache and contiguous with the prior line. Adding \(LinePadding\) would
-mean that we would have to skip over those padding elements at the end of each
-horizontal \(i\) line. This might cause prefetching problems as we would no
-longer be streaming through memory contiguously.
+In the \(ikj\) layout, currently we iterate through contiguous horizontal \(i\)
+lines (with extent \(nx\)), then we go to the line at the next vertical level
+which is in cache and contiguous with the prior line (the alternative iteration
+scheme for the \(ikj\) layout described in Section \ref{} is not considered
+here). Adding \(LinePadding\) would mean that we would have to skip over those
+padding elements at the end of each horizontal \(i\) line. This might cause
+prefetching problems as we would no longer be streaming through memory
+contiguously.
 
 We have not yet fully explored the impact of \(LinePadding\) in the \(ikj\)
 versions of NAMEFORALGO. Currently, NAMEFORALGO does not have any mitigation
@@ -874,30 +890,57 @@ may be due to L1D vertical conflicts, although they could also be explained by
 insufficient hardware prefetching. We intend to investigate this effect and the
 impact of \(LinePadding\) in the future.
 
-% TODO: Talk about cache conflict resolution. 
-
-
 %===========================================================================
 \section{Experimental Setup}
-\fix{Rename the Github repo from tridiagonal\_solve\_benchmarks to tridiagonal\_solve\_benchmark}
 The software described in this paper is known as the Tridiagonal Solve
 Benchmark (TSB). TSB is freely available on Github under the Boost Software
 License, version 1.0. Revision WHATEVER contains the source code used for the
-experiments in this paper.
+experiments in this paper. \fxnote{Rename the Github repo from tridiagonal\_solve\_benchmarks to tridiagonal\_solve\_benchmark}
+
+\fxnote{Paragraph describing test problem and grid set up.}
+
+\fxnote{Paragraph about different variants.}
+
+\begin{table*}[t]
+\centering
+\caption{\textbf{Test Platforms:}}
+\begin{tabular}{|c|c|c|c|} \hline
+\textbf{System Name}     & \textbf{Edison}          & \textbf{Cori}            & \textbf{Carl}             \\ \hline
+Model                    & Intel Xeon E5-2695 v2    & Intel Xeon E5-2698 v3    & Intel Xeon Phi 7210       \\ \hline
+Microarchitecture        & Ivy Bridge               & Haswell                  & Knight's Landing          \\ \hline
+Vector Instruction Set   & AVX                      & AVX2                     & AVX512                    \\ \hline
+CPU Clock Frequency      & 2.4 GHz (3.2 GHz Turbo)  & 2.3 GHz (3.6 GHz Turbo)  & 1.3 GHz (1.5 GHz Turbo)   \\ \hline
+Processing Units (Cores) & 12                       & 16                       & 64                        \\ \hline
+Hardware Threading       & 2-way                    & 2-way                    & 4-way                     \\ \hline
+L1D Cache                & 32KB 8-way               & 32KB 8-way               & 32KB 8-way                \\
+                         & (local to each core)     & (local to each core)     & (local to each core)      \\ \hline
+L2 Cache                 & 256KB 8-way              & 256KB 8-way              & 1024KB 16-way; 512KB/core \\
+                         & (local to each core)     & (local to each core)     & (shared by 2 cores)       \\ \hline
+L3 Cache                 & \fxnote{hwloc}           & \fxnote{hwloc}           & \fxnote{hwloc}            \\ \hline
+TLB                      & \fxnote{TODO}            & \fxnote{TODO}            & \fxnote{TODO}             \\ \hline
+Memory                   & \fxnote{TODO}            & \fxnote{TODO}            & \fxnote{TODO}             \\ \hline
+\end{tabular}
+\label{tab:test_platforms}
+\end{table*}
 
 TSB currently targets x86-64 microarchitectures with support for the AVX vector
-extensions running POSIX-compliant operating systems. It is written in ISO
-C++14 and has no external software dependencies. The code contains no vector
-intrinsics or vector assembly. We rely entirely on the compiler vectorization
-engine for correct vector code generation, utilizing compiler hints to indicate
-alignment, loop trip count and aliasing assumptions. Avoiding vector intrinsics
-and hand-written assembly makes TSB portable between different x86-64 vector
-instruction sets (SSE, AVX, AVX2, AVX512). It also leads to better code by
-giving the compiler the freedom to select the correct instructions and perform
-optimizations which we have found to be inhibited by explicit vector
-intrinsics, such as post-vectorization loop unrolling. We manually inspect the
-compiler-generated assembly to verify that our assumptions about the
-compiler-programmer contract are being upheld.
+extensions running POSIX-compliant operating systems. The systems listed in
+Table \ref{tab:x8664_test_platforms} were used to produce the results presented in
+this paper.
+
+\fxnote{Paragraph describing general environment considerations on these platforms. Quadcache mode on KNL (maybe reference that paper of Sam's). Single socket runs on all platforms. All runs were 1 thread per core, hwloc used for binding.}
+
+TSB is written in ISO C++14 and has no external software dependencies. The code
+contains no vector intrinsics or vector assembly. We rely entirely on the
+compiler vectorization engine for correct vector code generation, utilizing
+compiler hints to indicate alignment, loop trip count and aliasing assumptions.
+Avoiding vector intrinsics and hand-written assembly makes TSB portable between
+different x86-64 vector instruction sets (SSE, AVX, AVX2, AVX512). It also
+leads to better code by giving the compiler the freedom to select the correct
+instructions and perform optimizations which we have found to be inhibited by
+explicit vector intrinsics, such as post-vectorization loop unrolling. We
+manually inspect the compiler-generated assembly to verify that our assumptions
+about the compiler-programmer contract are being upheld.
 
 A compliant optimizing and vectorizing C++14 compiler is required to build the
 software. Currently only the Intel C++ Compiler is supported. Other C++14
@@ -915,29 +958,7 @@ vectorization engine cause unnecessary remainder loops to be generated. Usage
 of an older version of the Intel C++ Compiler may cause sub-optimal code
 generation which degrades the performance of the benchmark.
 
-\begin{table}
-\centering
-\caption{\textbf{x86-64 Test Platforms:}}
-\begin{tabular}{|c|c|c|c|} \hline
-\textbf{System Name}     & \textbf{Edison}          & \textbf{Cori}            & \textbf{Carl}             \\ \hline
-Model                    & Intel Xeon E5-2695 v2    & Intel Xeon E5-2698 v3    & Intel Xeon Phi 7210       \\ \hline
-Microarchitecture        & Ivy Bridge               & Haswell                  & Knight's Landing          \\ \hline
-Vector Instruction Set   & AVX                      & AVX2                     & AVX512                    \\ \hline
-CPU Clock Frequency      & 2.4 GHz (3.2 GHz Turbo)  & 2.3 GHz (3.6 GHz Turbo)  & 1.3 GHz (1.5 GHz Turbo)   \\ \hline
-Processing Units (Cores) & 12                       & 16                       & 64                        \\ \hline
-Hardware Threading       & 2-way                    & 2-way                    & 4-way                     \\ \hline
-L1D Cache                & 32KB 8-way               & 32KB 8-way               & 32KB 8-way                \\
-                         & (local to each core)     & (local to each core)     & (local to each core)      \\ \hline
-L2 Cache                 & 256KB 8-way              & 256KB 8-way              & 1024KB 16-way; 512KB/core \\
-                         & (local to each core)     & (local to each core)     & (shared by 2 cores)       \\ \hline
-L3 Cache                 & \fix{hwloc}              & \fix{hwloc}              & \fix{hwloc}               \\ \hline
-TLB                      & \fix{TODO}               & \fix{TODO}               & \fix{TODO}                \\ \hline
-Memory                   & \fix{TODO}               & \fix{TODO}               & \fix{TODO}                \\ \hline
-\end{tabular}
-\label{tab:test_platforms}
-\end{table}
-
-% Say something bold about relying on the compiler vectorizer
+\fxnote{Paragraph about profiling.}
 
 %===========================================================================
 \section{Results}
@@ -1121,22 +1142,21 @@ For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitig
 
 %===========================================================================
 \section{Conclusion}
-\fix{Bryce to write}
 
 \section{Future Work}
 
-\fix{Talk about combining matrix build}
+\fxnote{Paragraph about rolling matrix}
 
-\fix{Discussion of rolling matrix stuff}
+\fxnote{Paragraph discussing combining the matrix build into the kernel}
 
 %===========================================================================
 \section*{Acknowledgments}
-\fix{Comment this section out before submitting... Reformat before finalizing...}
-\fix{Intel IPCC ack, too}
+
+\fxnote{Add Intel IPCC acknowledgments}
 
 This material is based upon work supported by the U.S. Department of Energy, Office of Science, Advanced Scientific Computing Research, Scientific Discovery through Advanced Computing (SciDAC) program.
 This research used resources in Lawrence Berkeley National Laboratory and the National Energy Research Scientific Computing Center, which are supported by the U.S. Department of Energy Office of Science's Advanced Scientific Computing Research program under contract number DE-AC02-05CH11231.  
-This research used resources in Louisiana State University's Center for Computation and Technology. \fix{CHECK WITH ADRIAN ON WORDING}
+This research used resources in Louisiana State University's Center for Computation and Technology. \fxnote{Check with Adrian if there's wording here that LSU likes}
 
 %This research used resources of the National Energy Research Scientific Computing Center (NERSC), which is supported by the Office of Science of the U.S. Department of Energy under contract DE-AC02-05CH11231.
 %This research used resources of the Argonne Leadership Computing Facility at Argonne National Laboratory, which is supported by the Office of Science of the U.S. Department of Energy under contract DE-AC02-06CH11357.
