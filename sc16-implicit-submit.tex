@@ -610,6 +610,7 @@ would be too great relative to the execution time of useful work per
 inner-iteration ("left side" effect). These tile sizes would either require
 smaller vertical dimensions than we use in the production application (\(k <
 16\)) or horizontal dimensions too small to vectorize efficiently (\(i < 16\)).
+\item The optimal tile size would fit into the L2 cache.
 \item There would be a drop in performance for tile sizes which were too large to fit into the L2 cache.
 \item There would be a drop in performance for tile sizes which were too large to fit into the L3 or HBM cache.
 \item Sufficiently large tile sizes would express insufficient parallelism and
@@ -706,6 +707,151 @@ more significant impact of the \(ikj\) layout on the KNL.
 
 In addition to to data layout selection and tiling, it was necessary for us to
 mitigate potential data cache conflicts, to ensure optimal cache performance.
+It is necessary to both align and pad the four arrays used in our solver to
+avoid accessing array elements which have addresses that are structurally
+similar enough to be mapped to the same cache set (e.g. two addresses which are
+aligned to the same power of two).
+
+The loops in our algorithm will always access elements of four different arrays
+with the same horizontal (\(ij\)) indices, and will access at most two
+different adjacent vertical (\(k\)) indices. So, to avoid conflicts we must ensure 
+that:
+
+\begin{itemize}
+\item \textbf{Inter-Array Conflicts} Elements of different arrays which have the same \(ijk\) indices map to different cache sets.
+\item \textbf{Vertical Conflict} Elements of the same array which share the same \(ij\) indices map to different cache sets.
+\end{itemize}
+
+As described in the previous section, we expected the optimal tile size for
+NAMEFORALGO to be small enough to fit into the L2 cache, so our cache conflict
+considerations only account for L1D and L2 cache conflict misses. Note the
+formula for the size of a set-associative cache (brackets denote units):
+
+\[
+CacheSize [Bytes] = Associativity [\# of Ways] * CacheLineSize [Bytes] * NumberOfSets
+\]
+
+To deal conflicts between elements of different arrays with the same
+\(ijk\) indices, we align the base of each array differently. Assuming that all
+the arrays are the same size, this ensures that the elements with the same
+\(ijk\) indices in all four arrays will also be aligned differently. While
+arrays \(b\) and \(c\) technically have one fewer vertical levels than \(u\)
+and \(a\), for simplicity we allocate an equal amount of storage for all four
+arrays. Each array is aligned to \(ArrayBaseAlign+nA*ArrayAlignStep\)
+where \(nA\) is \(0\) for \(u\), \(1\) for \(a\), \(2\) for \(b\) and \(3\) for
+\(c\).
+
+\(ArrayBaseAlign\) should be a power of 2; 1MB is used for all the results
+presented in this paper. \(ArrayAlignStep\) is the sum of two values,
+\(L1DArrayAlignStep\) and \(L2ArrayAlignStep\), which are computed based on the
+properties of the L1D and L2 caches on the target microarchitecture:
+
+\[
+BytesPerWay [Bytes / Way] = CacheSize [Bytes] / Associativity [Ways]
+\]
+
+\[
+L1DArrayAlignStep [Bytes] = L1DBytesPerWay [Bytes / Way] / 4 [\# of Arrays]
+L2ArrayAlignStep [Bytes]  = L2BytesPerWay [Bytes / Way]  / 4 [\# of Arrays]
+\]
+
+\[
+ArrayAlignStep [Bytes] = L1DArrayAlignStep [Bytes] + L2ArrayAlignStep [Bytes]
+\]
+
+To address conflicts between elements of the same array which have the same
+\(ij\) indices but reside on two separate, adjacent vertical levels, our
+strategy depends on the layout used. For the \(ijk\) layout, we need to add
+padding \(PlanePadding\) at the end of each contiguous horizontal (\(ij\))
+plane to ensure that vertical neighbors are not structural similar (e.g.
+aligned to the same power of 2). \(PlanePadding\) is added to the \(k\) stride,
+e.g. the indexing formula changes from:
+
+\[
+i + nx * j + nx * ny * k
+\]
+
+to:
+
+\[
+i + nx * j + (nx * ny + PlanePadding) * k
+\]
+
+\(PlanePadding\) is calculated similar to \(ArrayAlignStep\):
+
+\[
+L1DPlanePadding [Bytes] = L1DBytesPerWay [Bytes / Way] / nz [\# of Vertical Levels]
+L2PlanePadding [Bytes]  = L2BytesPerWay [Bytes / Way]  / nz [\# of Vertical Levels]
+\]
+
+\[
+PlanePadding [Bytes] = L1DPlanePadding [Bytes] + L2PlanePadding [Bytes]
+\]
+
+We have found that the storage overhead of \(PlanePadding\) (shown below in
+Table \ref{}) is relatively small for non-trivial problems. \fix{IS THIS TRUE?}
+
+A similar approach could be used to deal with these vertical cache conflicts
+when using the \(ikj\) layout. Instead of adding \(PlanePadding\), we would add
+\(LinePadding\) at the end of each contiguous \(i\) line. The indexing formula
+would change from:
+
+\[
+i + nx * nz * j + nx * k
+\]
+
+to:
+
+\[
+i + (nx + LinePadding) * nz * j + (nx + LinePadding) * k
+\]
+
+In the \(ikj\) layout, the tile for each array is a contiguous region which is
+small enough to fit into the L2 cache along with the tiles from the other three
+arrays, but large enough that it cannot fit into the L1D cache with the other
+three arrays. We should not need to do anything to address L2 vertical
+conflicts for the \(ikj\) layout. Because all the elements are contiguous in
+memory and the per-array tile will fit into the L2, the addresses of the
+elements should already be well-distributed across the sets of the L2 cache.
+\(LinePadding\) only needs to consider L1D vertical conflicts:
+
+\[
+LinePadding [Bytes] = L1DBytesPerWay [Bytes / Way] / nz [\# of Vertical Levels]
+\]
+
+However, there are downsides to applying this technique to the \(ikj\) layout.
+Firstly, \(LinePadding\) will increase the size of the contiguous per-array
+tiles, which might reduce the maximum tile size that can fit into the L2 cache
+and introduce an effect similar to the TLB issue described in Section \ref{} by
+making it infeasible to use tile sizes small enough to fit into the L2 cache.
+
+\(PlanePadding\) for the \(ijk\) layout does not have this issue. In most
+cases, the storage overhead for \(PlanePadding\) is much smaller than the
+storage overhead for \(LinePadding\), even though \(LinePadding\) only needs to
+mitigate L1D conflicts (see Table \ref{}). However, tiles in \(ijk\) layout are
+not contiguous, it should be noted that \(PlanePadding\) will increase the
+stride between non-contiguous regions in the \(ijk\) layout version of
+NAMEFORALGO. 
+
+An example might be illustrative. \(PlanePadding\) for the \(ijk\) layout adds
+\(nz\) contiguous regions containing \(PlanePadding\) padding elements (one region
+at the end of each horizontal \(ij\) plane). Recall that the vertical extent, \(nz\), 
+is typically small \fix{HOW SMALL}. \(LinePadding\) for the \(ikj\) layout adds
+\(nx*nz\) contiguous regions containing \(LinePadding\) padding elements (one region
+at the end of each horizontal \(i\) line).
+
+Additionally, we were concerned that the use of \(LinePadding\) might disrupt
+hardware prefetching. In the \(ijk\) layout, we iterate through contiguous
+horizontal \(ij\) planes (with extent \(nx*ny\)), then jump to next plane which
+is in cache but not contiguous with the current plane (skipping over other
+tiles and \(PlanePadding\) pad elements).
+
+In the \(ikj\) layout, we iterate through contiguous \fix{TODO}
+
+% TODO: Interesting decision between ikj iteration vs ijk iteration in the ikj
+% layout. May want to talk about that.
+
+% TODO: Elaborate on distinction between entire tile/per array tile.
 
 % TODO: Talk about cache conflict resolution. 
 
