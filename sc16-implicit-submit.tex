@@ -361,52 +361,52 @@ for (auto k = n - 2 ; k >= 0; --k) {
 
 \fxnote{Paragraph discussing the changes in AI with cached variant}
 
-One well-known technique for optimizing floating point divisions is to replace
-division operations with fast reciprocal estimates (RCP) when possible. On many
-platforms where floating point division operations are not pipelined, floating
-point RCP operations will also not be pipelined, however they generally have
-much lower latency and higher throughput than division operations. Many
-optimizing compilers will transparently and reliable perform this optimization.
-However, there is a caveat on 256-bit AVX and AVX2 platforms (e.g. Sandybridge,
-Ivy Bridge, Haswell and Skylake); no double-precision RCP is available on these
-platforms, although a single-precision RCP instruction is available.
-
-% TODO: Probably give this a name.
-
-We experimented with the use of a single-precision RCP and Newton Raphson
-iteration to compute a fast division estimation. We are not aware of a compiler
-which provides optionally provides this optimization. To implement the
-optimization, we simply type cast the double-precision values to
-single-precision, perform a division operation, cast back to double-precision
-and then preform Newton Raphson iterations (at double precision). We rely on
-the compiler to replace the division with an RCP instruction.
-
-\begin{lstlisting}
-template <std::size_t NRIterations = 1>
-double nr_rcp_divide(double num, double den) {
-  double x = float(1.0) / float(den);
-
-  for (auto i = 0; i < NRIterations; ++i)
-    x = x + x * (1.0 - den * x);
-
-  return num * x;
-}
-\end{lstlisting}
-
-Since the single-precision RCP instruction will operate on twice as many values
-as a double-precision division from the same instruction set, when our division
-estimate is used in a vectorized loop it is prudent to unroll the loop at least
-once so that one single-precision RCP instruction can service two
-double-precision iterations. Again, we have been able to rely on the compiler
-to handle this component of the optimization.
-
-We do pay an overhead for the type conversion, in the form of packed-double to
-packed-single vector instructions. Additional double-precision multplications
-and additions are also needed, even with 0 Newton Raphson iterations.
-Section~\ref{} and Table~\ref{} discuss the performance of this division
-estimate and the tradeoff in accuracy.
-
-\fxnote{Paragraph explaining why we're not actually doing this.}
+%One well-known technique for optimizing floating point divisions is to replace
+%division operations with fast reciprocal estimates (RCP) when possible. On many
+%platforms where floating point division operations are not pipelined, floating
+%point RCP operations will also not be pipelined, however they generally have
+%much lower latency and higher throughput than division operations. Many
+%optimizing compilers will transparently and reliable perform this optimization.
+%However, there is a caveat on 256-bit AVX and AVX2 platforms (e.g. Sandybridge,
+%Ivy Bridge, Haswell and Skylake); no double-precision RCP is available on these
+%platforms, although a single-precision RCP instruction is available.
+%
+%% TODO: Probably give this a name.
+%
+%We experimented with the use of a single-precision RCP and Newton Raphson
+%iteration to compute a fast division estimation. We are not aware of a compiler
+%which provides optionally provides this optimization. To implement the
+%optimization, we simply type cast the double-precision values to
+%single-precision, perform a division operation, cast back to double-precision
+%and then preform Newton Raphson iterations (at double precision). We rely on
+%the compiler to replace the division with an RCP instruction.
+%
+%\begin{lstlisting}
+%template <std::size_t NRIterations = 1>
+%double nr_rcp_divide(double num, double den) {
+%  double x = float(1.0) / float(den);
+%
+%  for (auto i = 0; i < NRIterations; ++i)
+%    x = x + x * (1.0 - den * x);
+%
+%  return num * x;
+%}
+%\end{lstlisting}
+%
+%Since the single-precision RCP instruction will operate on twice as many values
+%as a double-precision division from the same instruction set, when our division
+%estimate is used in a vectorized loop it is prudent to unroll the loop at least
+%once so that one single-precision RCP instruction can service two
+%double-precision iterations. Again, we have been able to rely on the compiler
+%to handle this component of the optimization.
+%
+%We do pay an overhead for the type conversion, in the form of packed-double to
+%packed-single vector instructions. Additional double-precision multplications
+%and additions are also needed, even with 0 Newton Raphson iterations.
+%Section~\ref{} and Table~\ref{} discuss the performance of this division
+%estimate and the tradeoff in accuracy.
+%
+%\fxnote{Paragraph explaining why we're not actually doing this.}
 
 \subsection{Parallelization and Vectorization Strategy}
 
