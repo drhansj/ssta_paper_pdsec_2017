@@ -897,7 +897,44 @@ Benchmark (TSB). TSB is freely available on Github under the Boost Software
 License, version 1.0. Revision WHATEVER contains the source code used for the
 experiments in this paper. \fxnote{Rename the Github repo from tridiagonal\_solve\_benchmarks to tridiagonal\_solve\_benchmark}
 
-\fxnote{Paragraph describing test problem and grid set up.}
+% \fxnote{Paragraph describing test problem and grid set up.}
+The benchmark suite contains a multi-dimensional array abstraction, generic
+solver components and a driver. The benchmark solves the following
+one-dimensional diffusion equation in each vertical column of a 3D cartesian
+grid using the implicit Backward Time, Centered Space (BTCS) finite difference
+method:
+
+\begin{align*}
+u_t &= Du_kk, \: k \: \text{in} \: (0, 1) \\
+                                          \\
+u(k, 0) &= sin(N * \pi * k)               \\
+u(0, t) &= u(1, t) = 0
+\end{align*}
+
+\noindent where \(D\) is the diffusion coefficient and \(N\) is the frequency of the sine
+wave in the initial conditions. This problem has an exact solution:
+
+\begin{align*}
+u(k, t) = e ^ (-D * N^2 * \pi^2 * t) * sin(N * \pi * k)
+\end{align*}
+
+An identical form of the problem is initialized in every vertical column of the
+3D grid. To verify numerical correctness, we compute the L2 norm and residual
+vector for each vertical column solve.
+
+Square and cubic problems tend to have limited flexibility in how they can be
+decomposed into equally-sized chunks of work, which can be problematic for a
+benchmark where we wish to explore different degrees of parallelism and
+different tile sizes. Because the horizontal (ij) shape of the 3D grid in TSB
+has little significance, we decided to prefer a long rectangular grid, with
+fixed and small i and k extents and a long, variable j extent.
+
+It should be noted that the horizontal shape of the grid is not entirely
+arbitrary. In the tile-j scheme that we use, the extent of i controls the
+lower bound on the tile size and completely controls the loop trip count for
+the inner-most unit-stride loop. We cannot use the vertical extent as a
+tile-size control because the number of vertical levels is largely determined
+by the physics of the production code.
 
 \fxnote{Paragraph about different variants.}
 
