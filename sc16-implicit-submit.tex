@@ -1027,6 +1027,10 @@ listed in Table \ref{tab:tsb_variant_characterstics}. Each specific variant is
 instantiated by combining different generic building blocks within the TSB
 codebase; code which is shared by different variants is not duplicated.
 
+The list of possible variant instantiations is long and combinatoric in nature;
+we omit it for brevity, as the description of distinguishing characteristic is
+sufficiently descriptive.
+
 \subsection{Hardware and Software Utilized}
 
 \fxnote{Cleanup PUs/cores}
@@ -1198,6 +1202,34 @@ grain size that we made in Section \ref{} and show how the SSTA algorithm
 performs in comparison with the legacy LAPACK-based approach used in our
 production climate application and the theoretical performance model we
 described in Section \ref{}.
+
+The first experiment is a parameter sweep of different tile sizes. We conducted
+the parameter sweep for all tiled and parallelized TSB variants that were
+feature complete at the time. Although it met those requirements, we excluded
+the MKL variant which uses the kji layout and does gather-style copies of u
+into contiguous buffers to pass to LAPACK. Although it most closely mirrors the
+performance of the original state of the production code, it is not reasonable
+a reasonable reference point because it performs allocations within the timed 
+region.
+
+All variants were used double precision data types, a full grid scheme and
+OpenMP for parallelization. We used a LAPACK-based ijk layout variant which
+uses Intel's MKL library. All the other variants were different instantiations
+of the SSTA algorithm:
+
+%\begin{itemize} 
+%\end{itemize}
+
+Recall that we use the \textbf{tile width} parameter tw (e.g. the j extent of
+the tile) to control the \textbf{tile size} (e.g. the sum of the size of a
+single tile of a, b, c and u). Also recall that we allocate nixnjxnk elements
+instead of nixnjxn(k-1) for the diagonal arrays a and c to simplify our cache
+aliasing conflict mitigation strategy, so the true size of a tile is the
+slightly larger \textbf{tile storage size}, although the extra tile elements
+are never accessed. As described in Section \ref{}, we set ni and nk as 32 for
+this experiment, so the tile storage size will often be a power of 2. To
+simplify visualization, we will use tile storage size instead of tile size or
+tile width in our discussion of this parameter sweep.
 
 \begin{figure*}[!bt]
     \centering
