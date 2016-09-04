@@ -174,21 +174,21 @@ We conclude that the approach is effective at optimizing both vectorization
 % 
 One important class of problems in computational science is the solving
   of smaller-dimensional matrix subproblems that are duplicated across
-  many degrees of freedom in a larger two or more dimension computation.
+  many degrees of freedom in a larger two (or more) dimension computation.
 Several examples of this include: 
 \begin{itemize}
 \item Pointwise chemistry systems in the context of a larger, 
   flow simulations. 
-Examples include geochemistry~\cite{??}, cloud microphysics~\cite{??},
-  and combustion~\cite{??};
-\item Solving one-dimensional systems that represent a ``primary''
+Examples include geochemistry~\cite{PFLOTRAN_2010}, 
+  cloud microphysics~\cite{MG2_2015}, and combustion~\cite{PaznerEtAl_2016};
+\item Solving one-dimensional systems that represent a numerically ``stiff''
   direction for a physical phenomenon.
-Examples here include atmospheric radiation~\cite{??}, groundwater
-  penetration~\cite{??}, or models for cloud convection~\cite{??}; and
+Examples here include atmospheric radiation~\cite{RRTMG_2008}, groundwater
+  penetration~\cite{CLM_PFLO_2016}, or models for 
+  cloud convection~\cite{SAM_2005}; and
 \item Implicit solvers that need to couple these kinds of subsystems, 
-  such as physics-based preconditioners~\cite{??}, alternating 
-  direction implicit ADI,~\cite{??}, and operator-split or
-  semi-implicit time integrators~\cite{??}.
+  such as line relaxation~\cite{TrottenbergEtAl_2000} and 
+  semi-implicit time integrators~\cite{PaznerEtAl_2016}.
 \end{itemize}
 In most cases, these matrices are relatively small 
   (ranging from $O(10-100)$ chemistry components or ``levels'' 
@@ -200,7 +200,8 @@ Thus, because these are often non-linear matrix systems with space- and
   ``factor once, solve many times'' approach, which is often used 
   as a model matrix performance test.
 This prevents amortizing setup and factorization costs
-  across multiple right-hand side solves as in \emph{dgxxxxx}~\cite{??},
+  across multiple right-hand side solves as in 
+  \emph{DGTTRS}~\cite{IntelMKL_DGTTRS},
   and also challenges SIMD vectorization due to the odd size and
   dissimilar entries of the matrices, as well as the 
   memory access patterns relative to the bigger simulation data layout.
@@ -261,7 +262,7 @@ Overall, there is a gap in approaches that both have vectorization,
 %===========================================================================
 \section{Implementation}
 
-Suppose we have an $n$x$n$
+Suppose we have an $n \times n$
 tridiagonal matrix $A$ and two $n$-element vectors $u^{s}$ and $u^{s+1}$. We
 wish to solve $Au^{s+1} = u^{s}$ for $u^{s}$:
 
