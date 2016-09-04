@@ -320,6 +320,8 @@ for (auto k = n - 2 ; k >= 0; --k) {
 
 \fxnote{Paragraph describing AI}
 
+\subsection{Division Optimizations}
+
 % 1st Reference here is Intel Optimization Manual, 11.12
 % 2nd Reference here is the intrinsic manual
 When we analyzed implementations of the Thomas algorithm as described above, we
@@ -360,6 +362,8 @@ for (auto k = n - 2 ; k >= 0; --k) {
 \end{lstlisting}
 
 \fxnote{Paragraph discussing the changes in AI with cached variant}
+
+\fxnote{Revive the RCPPS optimization section}
 
 %One well-known technique for optimizing floating point divisions is to replace
 %division operations with fast reciprocal estimates (RCP) when possible. On many
@@ -408,7 +412,8 @@ for (auto k = n - 2 ; k >= 0; --k) {
 %
 %\fxnote{Paragraph explaining why we're not actually doing this.}
 
-\subsection{Parallelization and Vectorization Strategy}
+% Maybe call this Algorithmic Strategy?
+\subsection{Batching Strategy}
 
 In the applications described in Section~\ref{??}, we need to compute the
 solution to a tridiagonal system via the Thomas algorithm on each vertical
@@ -773,7 +778,7 @@ LinePadding \: \text{[Bytes]} = L1DBytesPerWay \: \text{[Bytes / Way]} \: / \: n
 \centering
 \caption{\textbf{Example Cache Conflict Mitigation Parameters}}
 
-\fxnote{TODO}
+\fxnote{KILL THIS}
 
 \label{tab:example_conflict_mitigation_parameters}
 \end{table*}
@@ -892,17 +897,18 @@ impact of \(LinePadding\) in the future.
 
 %===========================================================================
 \section{Experimental Setup}
-The software described in this paper is known as the Tridiagonal Solve
-Benchmark (TSB). TSB is freely available on Github under the Boost Software
-License, version 1.0. Revision WHATEVER contains the source code used for the
-experiments in this paper. \fxnote{Rename the Github repo from tridiagonal\_solve\_benchmarks to tridiagonal\_solve\_benchmark}
+The software described in this paper is a part of the Tridiagonal Solve
+Benchmarks collection. The TSB collection is freely available on Github under
+the Boost Software License, version 1.0. Revision WHATEVER contains the source
+code used for the experiments in this paper. The benchmark suite has three
+major components: a multi-dimensional array abstraction, generic solver
+components and a test harness.
 
-% \fxnote{Paragraph describing test problem and grid set up.}
-The benchmark suite contains a multi-dimensional array abstraction, generic
-solver components and a driver. The benchmark solves the following
-one-dimensional diffusion equation in each vertical column of a 3D cartesian
-grid using the implicit Backward Time, Centered Space (BTCS) finite difference
-method:
+\subsection{Test Problem}
+
+The benchmarks in TSB solve the following one-dimensional diffusion equation in
+each vertical column of a 3D Cartesian grid using the implicit Backward Time,
+Centered Space (BTCS) finite difference method:
 
 \begin{align*}
 u_t &= Du_kk, \: k \: \text{in} \: (0, 1) \\
@@ -930,13 +936,92 @@ has little significance, we decided to prefer a long rectangular grid, with
 fixed and small i and k extents and a long, variable j extent.
 
 It should be noted that the horizontal shape of the grid is not entirely
-arbitrary. In the tile-j scheme that we use, the extent of i controls the
+arbitrary for NAMEFORALGO. In the tile-j scheme that we use, the extent of i controls the
 lower bound on the tile size and completely controls the loop trip count for
 the inner-most unit-stride loop. We cannot use the vertical extent as a
 tile-size control because the number of vertical levels is largely determined
 by the physics of the production code.
 
-\fxnote{Paragraph about different variants.}
+\subsection{Constant Parameters}
+
+We held most of the parameters of the test problem constant when producing the
+results presented in this paper. A summary of the constant parameters and the
+rationale behind their value follows.
+
+\begin{itemize}
+\item Double precision data types were used for all results. 
+\item The vertical extent nk and the horizontal extent ni were both set to 32
+elements. We wanted to pick a power of 2 for the dimension that we would be
+holding constant, so that we could ensure we would observe cache aliasing
+conflicts when we picked a power of 2 for nj. For nk, we believe 32 elements is
+a reasonable lower bound for the number of vertical levels that would be used
+in our production climate code. The production codebase currently uses boxes
+with horizontal extents which are somewhat greater than 32 (\(O(64-256)\)).
+However, since ni dictates the minimum tile size in our tile-j scheme, we
+wanted to pick a smaller quantity to ensure that we were able to full explore
+the space of possible tile sizes. 
+\item The horizontal extent nj was set to \(2^14*3^2=147456\). Our target Ivy
+Bridge platform (see Table \ref{tab:test_platforms}) has 12 processing units
+per socket, so it was necessary to ensure that nj was divisible by 3 so that we
+would have an even, static division of work among processing units after
+tiling. With ni and nk set as 32, this gives a \textbf{problem size} of ~4.429
+GB (e.g. the sum of the size of the four arrays a, b, c and u). Recall that we
+allocate nixnjxnk instead of nixnjx(nk-1) elements for the diagonal a and c to
+simplify our cache aliasing conflict mitigation approach. So, the
+\textbf{storage size} size is actually 4.5 GB (not including padding elements
+for cache aliasing conflict mitigation).
+\item The number of time steps (ns) was set to 4 per processing unit. For
+example, running on 1 processing unit on our Knight's Landing platform, the
+number of time steps would be set to 4. Running on all 64 processing units, the
+number of time steps would be set to 256. This was done to ensure that runs
+using different numbers of processing units would execute in roughly the same
+amount of time without varying the problem size (e.g. fixed \textbf{problem
+size} but varying \textbf{total work}).
+\item The diffusion coefficient (D) in the test problem was set to 0.1 and the
+frequency of the sine wave (N) in the initial conditions was set to 1. The
+timestep size was set to 1e-7.
+\item ArrayBaseAlign was set to 1MB. On our Ivy Bridge and Haswell platforms,
+ArrayAlignStep was computed as 9216 bytes and PlanePadding was computed as 1152
+bytes. On our Knight's Landing platform, ArrayAlignStep was computed as 17408
+bytes and PlanePadding was computed as 2176 bytes. The plane padding storage
+overhead (\(nz*PlanePadding\)) on Ivy Bridge/Haswell was 36KB. On Knight's
+Landing it was 68KB.
+\end{itemize}
+
+The independent variables in our experiments were tile size (controlled by tile width),
+number of processing units and solver variant. The next section discusses the 
+different solver strategies available in TSB, a subset of which were used in the experiments
+described in this paper.
+
+\subsection{TSB Variants}
+
+The TSB suite contains variants of two different families of tridiagonal matrix
+solvers: LAPACK-based variants which solve each vertical column independently, and
+NAMFORALGO variants. The distinguishing characteristics of the variants are
+listed in Table \ref{tab:tsb_variant_characterstics}. Each specific variant is
+instantiated by combining different generic building blocks within the TSB
+codebase; code which is shared by different variants is not duplicated.
+
+\begin{table*}%[t]
+\centering
+\caption{\textbf{Characterstics of the Tridiagonal Solve Benchmarks (TSB):}}
+%* for simultanous refers to the "merged" approach which can't be parallelized right now because
+\begin{tabular}{|c|c|c|c|} \hline
+\textbf{Characterstic}       & \textbf{Options}                                     \\ \hline
+Matrix Solver Family         & LAPACK, SSTA                                         \\ \hline
+Batching Strategy            & Independent (LAPACK), Simultaneous (SSTA, LAPACK*)   \\ \hline
+Floating Point Precision     & Single, Double (LAPACK, SSTA)                        \\ \hline 
+Layout                       & kji (LAPACK), ijk (SSTA, LAPACK), ikj (SSTA)         \\ \hline
+Tiling Scheme                & Tile J (SSTA, LAPACK), Tile IJ (SSTA*, LAPACK*)      \\ \hline
+Grid Type                    & Full, Rolling (SSTA, LAPACK)                         \\ \hline
+Parallel Programming Model   & OpenMP (SSTA, LAPACK), HPX (SSTA*)                   \\ \hline
+Thomas Algorithm Formulation & Repeated Divide, Cached Divide (SSTA)                \\ \hline
+Division Mechanism           & C++ Operator (SSTA, LAPACK), RCPPS w/ NR (SSTA)      \\ \hline
+\end{tabular}
+\label{tab:tsb_variant_characterstics}
+\end{table*}
+
+\subsection{Hardware and Software Utilized}
 
 \begin{table*}[t]
 \centering
@@ -995,7 +1080,11 @@ vectorization engine cause unnecessary remainder loops to be generated. Usage
 of an older version of the Intel C++ Compiler may cause sub-optimal code
 generation which degrades the performance of the benchmark.
 
-\fxnote{Paragraph about profiling.}
+We made heavy use of the Intel Vectorization Advisor and the Intel VTune
+Amplifier profiler in our research. Both tools are sampling profilers that can
+gather data and analyze data from hardware-based performance monitoring
+facilities. We used Version A of Intel Vectorization Advisor and Version B of
+Intel VTune Amplifier.
 
 %===========================================================================
 \section{Results}
@@ -1185,6 +1274,10 @@ For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitig
 \fxnote{Paragraph about rolling matrix}
 
 \fxnote{Paragraph discussing combining the matrix build into the kernel}
+
+% Need a section explaining tile size / tile storage size
+
+% Future work should mention smaller tile sizes.
 
 %===========================================================================
 \section*{Acknowledgments}
