@@ -261,7 +261,7 @@ Overall, there is a gap in approaches that both have vectorization,
 %===========================================================================
 \section{Implementation}
 
-Suppose we have a symmetric positive-definite or diagonally-dominant $n$x$n$
+Suppose we have an $n$x$n$
 tridiagonal matrix $A$ and two $n$-element vectors $u^{s}$ and $u^{s+1}$. We
 wish to solve $Au^{s+1} = u^{s}$ for $u^{s}$:
 
@@ -293,19 +293,26 @@ u^{s}_{n-1}
 Our matrix $A$ is stored as a set of three vectors: an $n-1$-element
 sub-diagonal vector $a$, an $n$-element diagonal vector $b$ and an $n-1$-element
 super-diagonal vector $c$.
+In practical applications, a different matrix $A$ exists for
+  each $(i,j)$ location, because the diagonals may depend on the previous 
+  solution $u^{s}$ (in a non-linear iteration loop, for example).
 
-We can use a simplified form of Gaussian elimination which does not perform any
-pivoting to solve such a system. This method is known as the Thomas algorithm
-or the tridiagonal matrix algorithm (TDMA)~\cite{TDMA}, and it is \(O(n)\) in time,
-a significant improvement over full Gaussian elimination for a completely dense
-matrix, which is \(O(n^3)\) in time. We use the in-place Thomas algorithm,
+For a \emph{diagonally-dominant} tridiagonal matrix,
+  we can use a simplified form of Gaussian elimination 
+  that does not need pivoting, known as the Thomas 
+  tridiagonal matrix algorithm (TDMA)~\cite{TDMA}. 
+This takes advantage of sparsity to be \(O(n)\) in time, 
+  and can be extended to banded matrices and LU factorizations;
+  it is also a significant improvement over dense Gaussian elimination,
+  which is \(O(n^3)\) in time). 
+We use the in-place Thomas algorithm,
 which does not require any storage for temporary values but overwrites the $b$
-vector. We will also solve for $u^{s+1}$ in-place, overwriting $u^{s}$ (so our
-system is $Au$).
+vector. We will also solve for $u^{s+1}$ in-place, overwriting $u^{s}$.
+% (so our system is $Au$).
 
 % Citation here is elementary numerical analysis
-The in-place Thomas algorithm consists of two passes. First, a forward pass is
-performed to eliminate the $a_i$ elements~\cite{??}:
+The in-place Thomas algorithm consists of two passes~\cite{QuarteroniEtAl2007}. 
+First, a forward pass is performed to eliminate the $a_i$ elements:
 
 \begin{lstlisting}
 for (auto k = 1; k < n; ++k) {
@@ -316,7 +323,7 @@ for (auto k = 1; k < n; ++k) {
 \end{lstlisting}
 
 Then, an abbreviated form of backwards substitution is performed to obtain the
-solution~\cite{??}:
+solution:
 
 \begin{lstlisting}
 u[n - 1] = u[n - 1] / b[n - 1];
@@ -343,13 +350,13 @@ an AVX 256-bit double-precision divide on Sandy Bridge; 35 cycles on Ivy Bridge
 and Haswell~\cite{}) and low throughput relative to other floating point
 operations such as multiplication and addition.
 
-In the in-place Thomas algorithm described above, all the division operations
-have the same divisor - the temporary coefficient computed and stored in the
-diagonal vector \(b\). If we re-formulate the algorithm to store the reciprocal
-of that coefficient instead of storing the coefficient itself, we are able to
-remove the division in the backwards substitution pass. We call this the
-\textbf{cached-divide} in-place Thomas algorithm. The forward elimination pass
-is:
+Variants of the TDMA algorithm have been developed to minimize 
+  divides~\cite{QuarteroniEtAl2007} by caching them in temporary variables.
+Our approach is to compute and store temporary reciprocal values in the
+diagonal vector \(b\), which removes the division in the backwards 
+substitution pass. We call this the
+\textbf{cached-divide} in-place TDMA algorithm. The forward elimination pass
+becomes:
 
 \begin{lstlisting}
 b[0] = 1.0 / b[0];
