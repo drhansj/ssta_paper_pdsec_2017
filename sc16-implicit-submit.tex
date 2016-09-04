@@ -9,7 +9,6 @@
   {}
   {}
 \makeatother
-\usepackage[font=scriptsize,justification=justified,singlelinecheck=false]{caption}
 
 %===========================================================================
 \usepackage{listings}
@@ -57,6 +56,12 @@ xleftmargin=0.1cm,
 \usepackage{color}
 \usepackage{comment}
 \usepackage{graphicx}
+\usepackage{subfig}
+
+\captionsetup[subfigure]{position=top}
+
+%\usepackage[font=scriptsize,justification=justified,singlelinecheck=false]{caption}
+
 \usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage[hidelinks]{hyperref}
@@ -988,19 +993,13 @@ overhead (\(nz*PlanePadding\)) on Ivy Bridge/Haswell was 36KB. On Knight's
 Landing it was 68KB.
 \end{itemize}
 
-The independent variables in our experiments were tile size (controlled by tile width),
-number of processing units and solver variant. The next section discusses the 
-different solver strategies available in TSB, a subset of which were used in the experiments
-described in this paper.
+The independent variables in our experiments were tile size (controlled by tile
+width), number of processing units (discussed below in Section \ref{}) and
+solver variant. The next section discusses the different solver strategies
+available in TSB, a subset of which were used in the experiments described in
+this paper.
 
 \subsection{TSB Variants}
-
-The TSB suite contains variants of two different families of tridiagonal matrix
-solvers: LAPACK-based variants which solve each vertical column independently, and
-NAMFORALGO variants. The distinguishing characteristics of the variants are
-listed in Table \ref{tab:tsb_variant_characterstics}. Each specific variant is
-instantiated by combining different generic building blocks within the TSB
-codebase; code which is shared by different variants is not duplicated.
 
 \begin{table*}%[t]
 \centering
@@ -1021,7 +1020,16 @@ Division Mechanism           & C++ Operator (SSTA, LAPACK), RCPPS w/ NR (SSTA)  
 \label{tab:tsb_variant_characterstics}
 \end{table*}
 
+The TSB suite contains variants of two different families of tridiagonal matrix
+solvers: LAPACK-based variants which solve each vertical column independently, and
+NAMFORALGO variants. The distinguishing characteristics of the variants are
+listed in Table \ref{tab:tsb_variant_characterstics}. Each specific variant is
+instantiated by combining different generic building blocks within the TSB
+codebase; code which is shared by different variants is not duplicated.
+
 \subsection{Hardware and Software Utilized}
+
+\fxnote{Cleanup PUs/cores}
 
 \begin{table*}[t]
 \centering
@@ -1035,12 +1043,12 @@ CPU Clock Frequency      & 2.4 GHz (3.2 GHz Turbo)  & 2.3 GHz (3.6 GHz Turbo)  &
 Processing Units (Cores) & 12                       & 16                       & 64                        \\ \hline
 Hardware Threading       & 2-way                    & 2-way                    & 4-way                     \\ \hline
 L1D Cache                & 32KB 8-way               & 32KB 8-way               & 32KB 8-way                \\
-                         & (local to each core)     & (local to each core)     & (local to each core)      \\ \hline
-L2 Cache                 & 256KB 8-way              & 256KB 8-way              & 1024KB 16-way; 512KB/core \\
-                         & (local to each core)     & (local to each core)     & (shared by 2 cores)       \\ \hline
+                         & (local to each PU)     & (local to each PU)     & (local to each PU)      \\ \hline
+L2 Cache                 & 256KB 8-way              & 256KB 8-way              & 1024KB 16-way; 512KB/PU \\
+                         & (local to each PU)     & (local to each PU)     & (shared by 2 PUs)       \\ \hline
 L3 Cache                 & \fxnote{hwloc}           & \fxnote{hwloc}           & \fxnote{hwloc}            \\ \hline
 TLB                      & \fxnote{TODO}            & \fxnote{TODO}            & \fxnote{TODO}             \\ \hline
-Memory                   & \fxnote{TODO}            & \fxnote{TODO}            & \fxnote{TODO}             \\ \hline
+DDR4 SDRAM               & \fxnote{TODO}            & \fxnote{TODO}            & \fxnote{TODO}             \\ \hline
 \end{tabular}
 \label{tab:test_platforms}
 \end{table*}
@@ -1050,7 +1058,102 @@ extensions running POSIX-compliant operating systems. The systems listed in
 Table \ref{tab:x8664_test_platforms} were used to produce the results presented in
 this paper.
 
-\fxnote{Paragraph describing general environment considerations on these platforms. Quadcache mode on KNL (maybe reference that paper of Sam's). Single socket runs on all platforms. All runs were 1 thread per core, hwloc used for binding.}
+Our two Intel Xeon platforms, Edison and Cori, are homogeneous Cray
+supercomputers, consisting of traditional dual-socket x86-64 processors. Edison
+features Ivy Bridge processors, and Cori has Haswell processors. Haswell offers
+a number of important improvements over Ivy Bridge relevant to the solver described
+in this paper, such as increased DDR4 memory bandwidth, increased cache bandwidth
+and other cache performance improvements. On the whole, the two platforms have
+a very similar performance profile for our application.
+
+Our Knight's Landing (KNL) platform is notably different from the two Xeon systems.
+There are primarily four broad characteristics distinguishing the Knight's
+Landing from our traditional CPU platforms:
+
+\begin{itemize}
+\item \textbf{AVX512:} Knight's Landing has more vector units than our other
+platforms, and the vector width has been increased from 256 bits to 512 bits.
+AVX512 introduces new mask registers, and most vector operations support
+masking. Additionally, AVX512 has conflict detection instructions. 
+\item \textbf{Manycore Design:} Knight's Landing has twice as many
+cores and eight times as many hardware-threads per socket as our
+other platforms. Knight's Landing cores are \emph{light} cores based the Silvermont,
+an Intel Atom design, while our other platforms feature \emph{heavy} cores based on
+the Intel Core design.
+\item \textbf{Intra-Socket NUMA Effects:} Knight's Landing adds two new layers
+to the traditional hardware-thread \(\subset\) core \(\subset\) socket
+topology. A Knight's Landing socket contains four quadrants (each containing a
+fourth of the cores and DDR4 memory), and can be configured to expose each of
+these quadrants as a distinct NUMA domain. Additionally, each quadrant can be
+further subdivided into 2-core tiles.
+\item \textbf{High Bandwidth Memory and Different Cache Design:}
+Perhaps the most notable feature of the Knight's Landing microarchitecture is the
+on-package high-bandwidth MCDRAM (16GBs on our platform, with a pin bandwidth
+of NUMBER GB/s). While Knight's Landing has no traditional L3 cache, the MCDRAM
+can be configured as a hardware managed last level cache. Alternatively, the MCDRAM
+can be configured for explicit allocation and management by user code. The L2 
+design on Knight's Landing is also a departure from contemporary Xeon platforms.
+The two cores in a tile share a 16-way associative, inclusive 1MB L2 cache.
+Contemporary Xeons typically have an 8-way associative L2 cache which is local
+to each core and non-inclusive/non-exclusive with the L1D cache. Knight's
+Landing has 512KB of L2 capacity per core, while our other platforms have only
+256KB of L2 capacity per core (note that all platforms have 128KB L2 capacity
+per \emph{hardware-thread}). The L1D caches on Knight's Landing are similar to
+contemporaries.
+\end{itemize}
+
+The Knight's Landing processors can be configured for different NUMA topologies
+and MCDRAM uses. Each quadrant can exposed as a separate NUMA domain, two NUMA
+domains can be exposed (each containing one quadrant) or a single NUMA domain
+can be exposed (containing all cores). As mentioned above, the MCDRAM can either
+be configured to act as a last level cache, or it can be made available as
+programmable memory.
+
+For our experiments, we primarily ran in the \lstinline{quadcache} mode, which
+exposes a single NUMA locality and uses the MCDRAM as a last level cache. This
+mode allows users to run applications on Knight's Landing without any
+modifications to address NUMA effects or utilize MCDRAM. We were interested in
+investigating the performance of this particular mode as we believe it is the
+best effort for adoption of the microarchitecture.
+
+\subsection{Parallelization and Thread Pinning}
+
+The TSB variants used in the work described in this paper are parallelized
+using simple OpenMP pragmas. The problem is embarrassingly parallel; there is
+no dependency or data exchange whatsoever between different columns during the
+vertical solve. As such, we largely do not discuss scalability as a function of
+the number of processing units in this paper; we are instead interested in
+comparing performance against the manufacturer-specified pin bandwidth. Note,
+however, that as the Thomas algorithm has a low algorithmic intensity and is
+memory bandwidth bound, linear scaling should not be expected; memory-bandwidth
+bound codes typically experience non-linear effects, achieving super-linear
+performance at lower degrees of parallelism (exploiting shared caches, etc) and
+leveling off once the memory controller has saturated.
+
+The results presented in this paper show results on both 1 processing unit and
+1 socket. On our Ivy Bridge and Haswell platforms, we had 2 sockets available
+per node, however, we chose to limit ourselves to studying performance on a
+single socket to avoid needing to invest effort into optimizing for
+inter-socket NUMA effects. We did not believe that such efforts would be
+beneficial to the production applications we are working with. Our strategy for
+running on on multi-socket nodes in our production climate application is to
+run one or more threaded processes per NUMA domain and never run a process
+which spans two inter-socket NUMA domains (on Knight's Landing, there are
+intra-socket NUMA effects, but they do not have the same magnitude of impact on
+application performance and thus it might be feasible to run processes across
+multiple intra-socket NUMA domains on that platform). 
+
+It was important to ensure that threads were correctly pinned to processing
+units in all our experiments. For the experiments presented in this paper, we
+utilized one OS-thread per processing unit. In this threading regime, we wanted
+to pin OS-threads to hardware-threads to eliminate the possibility of systemic
+experimental uncertainty caused by the kernel context switching our OS-threads
+between different hardware-threads on a processing unit. E.g. we wanted to bind
+each OS-thread to a particular hardware-thread on a core, instead of binding
+each OS-thread to an entire core. We used hwloc~\cite{}, an affinity and
+topology framework, to achieve the desire thread pinning.
+
+\subsection{Toolchain}
 
 TSB is written in ISO C++14 and has no external software dependencies. The code
 contains no vector intrinsics or vector assembly. We rely entirely on the
@@ -1089,62 +1192,156 @@ Intel VTune Amplifier.
 %===========================================================================
 \section{Results}
 
-\begin{figure}%[thbp]
-\centering
-\caption{\textbf{Tile Size vs Bandwidth on Ivy Bridge:}}
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-Line graph, with vertical lines for cache sizes and a horizontal line for pin bandwidth.
-Shows both ijk and ikj layout, demonstrates the TLB issue described in the tiling section.
-For the ikj layout, demonstrates the five predictions we make in the tiling section.
-1 Socket worth of cores, sweep minimum feasible tile size to something past L3 size.
-\end{figure}
+We present the results of two experiments which characterize the impact of the
+optimizations described in this paper, support the predictions about optimal
+grain size that we made in Section \ref{} and show how the SSTA algorithm
+performs in comparison with the legacy LAPACK-based approach used in our
+production climate application and the theoretical performance model we
+described in Section \ref{}.
 
-\begin{figure}%[thbp]
-\centering
-\caption{\textbf{Tile Size vs Bandwidth on Haswell:}}
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-Line graph, with vertical lines for cache sizes and a horizontal line for pin bandwidth.
-Shows both ijk and ikj layout, demonstrates the TLB issue described in the tiling section.
-For the ikj layout, demonstrates the five predictions we make in the tiling section.
-1 Socket worth of cores, sweep minimum feasible tile size to something past L3 size.
-\end{figure}
+\begin{figure*}[!bt]
+    \centering
+    \label{fig:r0}
+    \caption{Lorem ipsum}
+    \subfloat[
+        Lorem ipsum
+    ]{
+        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \label{fig:r0c0}
+    }
+    \subfloat[
+        Lorem ipsum
+    ]{
+        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \label{fig:r0c1}
+    }
+    \subfloat[
+        Lorem ipsum
+    ]{
+        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \label{fig:r0c2}
+    }
+    \hspace{0mm}
+    \label{fig:r1}
+    \caption{Lorem ipsum}
+    \subfloat[
+        Lorem ipsum
+    ]{
+        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \label{fig:r1c0}
+    }
+    \subfloat[
+        Lorem ipsum
+    ]{
+        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \label{fig:r1c1}
+    }
+    \subfloat[
+        Lorem ipsum
+    ]{
+        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \label{fig:r1c2}
+    }
+    \hspace{0mm}
+    \label{fig:r2}
+    \caption{Lorem ipsum}
+    \subfloat[
+        Lorem ipsum
+    ]{
+        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \label{fig:r2c0}
+    }
+    \subfloat[
+        Lorem ipsum
+    ]{
+        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \label{fig:r2c1}
+    }
+    \subfloat[
+        Lorem ipsum
+    ]{
+        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \label{fig:r2c2}
+    }
+    \hspace{0mm}
+    \label{fig:r3}
+    \caption{Lorem ipsum}
+    \subfloat[
+        Lorem ipsum
+    ]{
+        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \label{fig:r3c0}
+    }
+    \subfloat[
+        Lorem ipsum
+    ]{
+        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \label{fig:r3c1}
+    }
+    \subfloat[
+        Lorem ipsum
+    ]{
+        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \label{fig:r3c2}
+    }
+\end{figure*}
 
-\begin{figure}%[thbp]
-\centering
-\caption{\textbf{Tile Size vs Bandwidth on Knight's Landing:}}
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-Line graph, with vertical lines for cache sizes and a horizontal line for pin bandwidth.
-Shows both ijk and ikj layout, demonstrates the TLB issue described in the tiling section.
-For the ikj layout, demonstrates the five predictions we make in the tiling section.
-1 Socket worth of cores, sweep minimum feasible tile size to something past L3 size.
-\end{figure}
-
-\begin{figure}%[thbp]
-\centering
-\caption{\textbf{Performance Impact of Optimizations on Ivy Bridge:}}
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-Bar graph, left to right: MKL, NAMEFORALGO, pin bandwidth
-For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitigation, +mitigation, +tiling, +cached-div, +ikj
-1 Socket worth of cores
-\end{figure}
-
-\begin{figure}%[thbp]
-\centering
-\caption{\textbf{Performance Impact of Optimizations on Haswell:}}
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-Bar graph, left to right: MKL, NAMEFORALGO, pin bandwidth
-For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitigation, +mitigation, +tiling, +cached-div, +ikj
-1 Socket worth of cores
-\end{figure}
-
-\begin{figure}%[thbp]
-\centering
-\caption{\textbf{Performance Impact of Optimizations on Knight's Landing:}}
-\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-Bar graph, left to right: MKL, NAMEFORALGO, pin bandwidth
-For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitigation, +mitigation, +tiling, +cached-div, +ikj
-1 Socket worth of cores
-\end{figure}
+%\begin{figure}%[thbp]
+%\centering
+%\caption{\textbf{Tile Size vs Bandwidth on Ivy Bridge:}}
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%Line graph, with vertical lines for cache sizes and a horizontal line for pin bandwidth.
+%Shows both ijk and ikj layout, demonstrates the TLB issue described in the tiling section.
+%For the ikj layout, demonstrates the five predictions we make in the tiling section.
+%1 Socket worth of cores, sweep minimum feasible tile size to something past L3 size.
+%\end{figure}
+%
+%\begin{figure}%[thbp]
+%\centering
+%\caption{\textbf{Tile Size vs Bandwidth on Haswell:}}
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%Line graph, with vertical lines for cache sizes and a horizontal line for pin bandwidth.
+%Shows both ijk and ikj layout, demonstrates the TLB issue described in the tiling section.
+%For the ikj layout, demonstrates the five predictions we make in the tiling section.
+%1 Socket worth of cores, sweep minimum feasible tile size to something past L3 size.
+%\end{figure}
+%
+%\begin{figure}%[thbp]
+%\centering
+%\caption{\textbf{Tile Size vs Bandwidth on Knight's Landing:}}
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%Line graph, with vertical lines for cache sizes and a horizontal line for pin bandwidth.
+%Shows both ijk and ikj layout, demonstrates the TLB issue described in the tiling section.
+%For the ikj layout, demonstrates the five predictions we make in the tiling section.
+%1 Socket worth of cores, sweep minimum feasible tile size to something past L3 size.
+%\end{figure}
+%
+%\begin{figure}%[thbp]
+%\centering
+%\caption{\textbf{Performance Impact of Optimizations on Ivy Bridge:}}
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%Bar graph, left to right: MKL, NAMEFORALGO, pin bandwidth
+%For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitigation, +mitigation, +tiling, +cached-div, +ikj
+%1 Socket worth of cores
+%\end{figure}
+%
+%\begin{figure}%[thbp]
+%\centering
+%\caption{\textbf{Performance Impact of Optimizations on Haswell:}}
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%Bar graph, left to right: MKL, NAMEFORALGO, pin bandwidth
+%For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitigation, +mitigation, +tiling, +cached-div, +ikj
+%1 Socket worth of cores
+%\end{figure}
+%
+%\begin{figure}%[thbp]
+%\centering
+%\caption{\textbf{Performance Impact of Optimizations on Knight's Landing:}}
+%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
+%Bar graph, left to right: MKL, NAMEFORALGO, pin bandwidth
+%For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitigation, +mitigation, +tiling, +cached-div, +ikj
+%1 Socket worth of cores
+%\end{figure}
 
 %\begin{table}%[htbp]
 %\center
