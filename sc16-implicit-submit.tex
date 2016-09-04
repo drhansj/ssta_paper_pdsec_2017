@@ -58,6 +58,8 @@ xleftmargin=0.1cm,
 \usepackage{graphicx}
 \usepackage{subfig}
 
+\usepackage{rotating}
+
 \captionsetup[subfigure]{position=top}
 
 %\usepackage[font=scriptsize,justification=justified,singlelinecheck=false]{caption}
@@ -1120,6 +1122,8 @@ modifications to address NUMA effects or utilize MCDRAM. We were interested in
 investigating the performance of this particular mode as we believe it is the
 best effort for adoption of the microarchitecture.
 
+\fxnote{Mention Hybrid Mode}
+
 \subsection{Parallelization and Thread Pinning}
 
 The TSB variants used in the work described in this paper are parallelized
@@ -1231,92 +1235,161 @@ this experiment, so the tile storage size will often be a power of 2. To
 simplify visualization, we will use tile storage size instead of tile size or
 tile width in our discussion of this parameter sweep.
 
-\begin{figure*}[!bt]
+%\begin{figure*}[!bt]
+\begin{sidewaysfigure*}[!bt]
     \centering
     \label{fig:r0}
     \caption{Lorem ipsum}
     \subfloat[
-        Lorem ipsum
+        Lorem ipsum 1
     ]{
-        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \includegraphics[width=0.33\textheight]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_1pus.pdf}
         \label{fig:r0c0}
     }
     \subfloat[
-        Lorem ipsum
+        Lorem ipsum 2
     ]{
-        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \includegraphics[width=0.33\textheight]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_1pus.pdf}
         \label{fig:r0c1}
     }
     \subfloat[
-        Lorem ipsum
+        Lorem ipsum 3
     ]{
-        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \includegraphics[width=0.33\textheight]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_1pus.pdf}
         \label{fig:r0c2}
     }
     \hspace{0mm}
     \label{fig:r1}
     \caption{Lorem ipsum}
     \subfloat[
-        Lorem ipsum
+        Lorem ipsum 4
     ]{
-        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \includegraphics[width=0.33\textheight]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
         \label{fig:r1c0}
     }
     \subfloat[
-        Lorem ipsum
+        Lorem ipsum 5
     ]{
-        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \includegraphics[width=0.33\textheight]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
         \label{fig:r1c1}
     }
     \subfloat[
-        Lorem ipsum
+        Lorem ipsum 6
     ]{
-        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+        \includegraphics[width=0.33\textheight]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
         \label{fig:r1c2}
     }
-    \hspace{0mm}
-    \label{fig:r2}
-    \caption{Lorem ipsum}
-    \subfloat[
-        Lorem ipsum
-    ]{
-        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-        \label{fig:r2c0}
-    }
-    \subfloat[
-        Lorem ipsum
-    ]{
-        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-        \label{fig:r2c1}
-    }
-    \subfloat[
-        Lorem ipsum
-    ]{
-        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-        \label{fig:r2c2}
-    }
-    \hspace{0mm}
-    \label{fig:r3}
-    \caption{Lorem ipsum}
-    \subfloat[
-        Lorem ipsum
-    ]{
-        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-        \label{fig:r3c0}
-    }
-    \subfloat[
-        Lorem ipsum
-    ]{
-        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-        \label{fig:r3c1}
-    }
-    \subfloat[
-        Lorem ipsum
-    ]{
-        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-        \label{fig:r3c2}
-    }
-\end{figure*}
+%    \hspace{0mm}
+%    \subfloat[
+%        Lorem ipsum 4
+%    ]{
+%        \includegraphics[width=0.5\textwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
+%        \includegraphics[width=0.5\textwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
+%        \label{fig:r1c1}
+%    }
+%    \hspace{0mm}
+%    \label{fig:r2}
+%    \caption{Lorem ipsum}
+%    \subfloat[
+%        Lorem ipsum 5
+%    ]{
+%        \label{fig:r2c0}
+%    }
+%    \subfloat[
+%        Lorem ipsum 6
+%    ]{
+%        \includegraphics[width=0.45\textwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
+%        \label{fig:r2c1}
+%    }
+%\end{figure*}
+\end{sidewaysfigure*}
+
+%\begin{figure*}[!bt]
+%    \centering
+%    \label{fig:r0}
+%    \caption{Lorem ipsum}
+%    \subfloat[
+%        Lorem ipsum
+%    ]{
+%        \includegraphics[width=0.3\textwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_knl_7210_08_21_2016_64pus.pdf}
+%        \label{fig:r0c0}
+%    }
+%    \subfloat[
+%        Lorem ipsum
+%    ]{
+%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+%        \label{fig:r0c1}
+%    }
+%    \subfloat[
+%        Lorem ipsum
+%    ]{
+%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+%        \label{fig:r0c2}
+%    }
+%    \hspace{0mm}
+%    \label{fig:r1}
+%    \caption{Lorem ipsum}
+%    \subfloat[
+%        Lorem ipsum
+%    ]{
+%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+%        \label{fig:r1c0}
+%    }
+%    \subfloat[
+%        Lorem ipsum
+%    ]{
+%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+%        \label{fig:r1c1}
+%    }
+%    \subfloat[
+%        Lorem ipsum
+%    ]{
+%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+%        \label{fig:r1c2}
+%    }
+%    \hspace{0mm}
+%    \label{fig:r2}
+%    \caption{Lorem ipsum}
+%    \subfloat[
+%        Lorem ipsum
+%    ]{
+%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+%        \label{fig:r2c0}
+%    }
+%    \subfloat[
+%        Lorem ipsum
+%    ]{
+%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+%        \label{fig:r2c1}
+%    }
+%    \subfloat[
+%        Lorem ipsum
+%    ]{
+%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+%        \label{fig:r2c2}
+%    }
+%    \hspace{0mm}
+%    \label{fig:r3}
+%    \caption{Lorem ipsum}
+%    \subfloat[
+%        Lorem ipsum
+%    ]{
+%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+%        \label{fig:r3c0}
+%    }
+%    \subfloat[
+%        Lorem ipsum
+%    ]{
+%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+%        \label{fig:r3c1}
+%    }
+%    \subfloat[
+%        Lorem ipsum
+%    ]{
+%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
+%        \label{fig:r3c2}
+%    }
+%\end{figure*}
 
 %\begin{figure}%[thbp]
 %\centering
