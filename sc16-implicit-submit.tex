@@ -336,7 +336,53 @@ for (auto k = n - 2 ; k >= 0; --k) {
 } 
 \end{lstlisting}
 
-\fxnote{Bryce: Paragraph describing AI}
+The Thomas algorithm is a very low algorithmic intensity (AI)~\cite{roofline}
+algorithm. During the course of our work, we developed a theoretical peak performance
+model for the Thomas algorithm. First, let us count the number of FLOPs performed.
+
+In each iteration of the forward elimination loop, we perform 1 division, 2
+multiplications and 2 subtractions. The multiplications and subtractions will
+be performed as a single fused-multiply-adds (FMA) instructions on supported
+platforms. For now, we will treat naively count division operations as a single
+FLOP. Thus, the forward elimination pass will require either 3 FLOPs or 5 FLOPs
+per iteration, or a total of either \(3(nk-1)\) FLOPs (on FMA architectures) or
+\(5(nk-1)\) FLOPs (on non-FMA architectures). The pre-substitution operation
+(the assignment to \lstinline{u[n - 1]} in the above snipper) performs a single
+division, adding 1 FLOP to the total count. Finally, we have the backwards
+substitution loop, which performs 1 multiplication, 1 subtraction and 1
+division. This adds either 2 FLOPs or 3 FLOPs, or a total of either \(2(nk-1)\)
+FLOPs (FMA) or \(3(nk-1\) FLOPs (non-FMA). Summing all the counts up, this
+gives us either \(3(nk-1)+2(nk-1)+1=5nk-4\) FLOPs (FMA) or
+\(5(nk-1)+3(nk-1)+1=8nk-7\) FLOPs (non-FMA) for the entire Thomas algorithm.
+
+Now let us consider the amount of data moved from and to main memory during
+execution of the Thomas algorithm.  We assume that we will achieve optimal
+performance when data which has been previously loaded does not need to be
+reloaded from main memory. We assume that accesses of elements from previous
+iterations will be loaded from a cache, not main memory (\lstinline{u[n - 1]}
+in the backward substitution loop for example). Our performance model also make
+the stronger assumption that the arrays \(a\), \(b\), \(c\) and \(u\) will be
+cached in between the forward elimination loop and the back substitution loop.
+
+Thus, we take a more macro approach to counting data movement. The algorithm
+accesses four arrays, reading from all of them and writing to two of them
+(\(b\), \(u\)). Two of the arrays have extent \(nk-1\), and have extent \(nk\).
+Thus, we read \(2(nk-1)+2(nk)=4nk-2\) elements. The arrays which we write to
+have extent \(nk\), so we write \(2nk\) elements. In total, \(2nk+4nk-2=6nk-2\)
+elements are moved. Assuming double precision, this means
+\((6nk-2)\)\lstinline{sizeof(double)}\(=48nk-16\) bytes are moved from main
+memory during the execution of the Thomas Algorithm.
+
+This gives us a FLOPs/byte ratio of \((5nk-4)/(48nk-16)\) (FMA) or
+\((8nk-7)/(48nk-16)\) (non-FMA). The lower bound for the Thomas algorithm's AI
+is \(1/32\) FLOPs/byte (for both FMA and non-FMA architectures) when \(nk=1\)
+(which is, of course, a nonsensical problem size). The upper bound (e.g. the
+limit as \(nk\) approaches infinity) is \(5/48\) FLOPS/byte (FMA) or \(1/6\)
+FLOPs/byte (non-FMA).
+
+Although some of the optimizations described in this paper slightly increase the
+ratio (e.g. the division optimizations described in Section \ref{}), the order of
+magnitude does not change.
 
 \subsection{Division Optimizations}
 
@@ -374,63 +420,69 @@ for (auto k = 1; k < n; ++k) {
 The backwards substitution pass becomes:
 
 \begin{lstlisting}
+u[n - 1] = u[n - 1] * b[n - 1];
+
 for (auto k = n - 2 ; k >= 0; --k) {
   u[k] = (u[k] - c[k] * u[k + 1]) * b[k];
 } 
 \end{lstlisting}
 
-\fxnote{Bryce: Paragraph discussing the changes in AI with cached variant}
+% Could have said more here.
+This optimization slightly increases the number of FLOPs performed by the
+Thomas algorithm, although the amount of data movement remains unchanged.
 
-\fxnote{Bryce: Revive the RCPPS optimization section}
+One well-known technique for optimizing floating point divisions is to replace
+division operations with fast reciprocal estimates (RCP) when possible. On many
+platforms where floating point division operations are not pipelined, floating
+point RCP operations will also not be pipelined, however they generally have
+much lower latency and higher throughput than division operations. Many
+optimizing compilers will transparently and reliable perform this optimization.
+However, there is a caveat on 256-bit AVX and AVX2 platforms (e.g. Sandybridge,
+Ivy Bridge, Haswell and Skylake); no double-precision RCP is available on these
+platforms, although a single-precision RCP instruction is available.
 
-%One well-known technique for optimizing floating point divisions is to replace
-%division operations with fast reciprocal estimates (RCP) when possible. On many
-%platforms where floating point division operations are not pipelined, floating
-%point RCP operations will also not be pipelined, however they generally have
-%much lower latency and higher throughput than division operations. Many
-%optimizing compilers will transparently and reliable perform this optimization.
-%However, there is a caveat on 256-bit AVX and AVX2 platforms (e.g. Sandybridge,
-%Ivy Bridge, Haswell and Skylake); no double-precision RCP is available on these
-%platforms, although a single-precision RCP instruction is available.
-%
-%% TODO: Probably give this a name.
-%
-%We experimented with the use of a single-precision RCP and Newton Raphson
-%iteration to compute a fast division estimation. We are not aware of a compiler
-%which provides optionally provides this optimization. To implement the
-%optimization, we simply type cast the double-precision values to
-%single-precision, perform a division operation, cast back to double-precision
-%and then preform Newton Raphson iterations (at double precision). We rely on
-%the compiler to replace the division with an RCP instruction.
-%
-%\begin{lstlisting}
-%template <std::size_t NRIterations = 1>
-%double nr_rcp_divide(double num, double den) {
-%  double x = float(1.0) / float(den);
-%
-%  for (auto i = 0; i < NRIterations; ++i)
-%    x = x + x * (1.0 - den * x);
-%
-%  return num * x;
-%}
-%\end{lstlisting}
-%
-%Since the single-precision RCP instruction will operate on twice as many values
-%as a double-precision division from the same instruction set, when our division
-%estimate is used in a vectorized loop it is prudent to unroll the loop at least
-%once so that one single-precision RCP instruction can service two
-%double-precision iterations. Again, we have been able to rely on the compiler
-%to handle this component of the optimization.
-%
-%We do pay an overhead for the type conversion, in the form of packed-double to
-%packed-single vector instructions. Additional double-precision multplications
-%and additions are also needed, even with 0 Newton Raphson iterations.
-%Section~\ref{} and Table~\ref{} discuss the performance of this division
-%estimate and the tradeoff in accuracy.
-%
-%\fxnote{Paragraph explaining why we're not actually doing this.}
+We experimented with the use of a single-precision RCP and Newton Raphson
+iteration to compute a fast division estimation. We are not aware of a compiler
+which provides optionally provides this optimization. To implement the
+optimization, we simply type cast the double-precision values to
+single-precision, perform a division operation, cast back to double-precision
+and then preform Newton Raphson iterations (at double precision). We rely on
+the compiler to replace the division with an RCP instruction.
 
-% Maybe call this Algorithmic Strategy?
+\begin{lstlisting}
+template <std::size_t NRIterations = 1>
+double nr_rcp_divide(double num, double den) {
+  double x = float(1.0) / float(den);
+
+  for (auto i = 0; i < NRIterations; ++i)
+    x = x + x * (1.0 - den * x);
+
+  return num * x;
+}
+\end{lstlisting}
+
+Since the single-precision RCP instruction will operate on twice as many values
+as a double-precision division from the same instruction set, when our division
+estimate is used in a vectorized loop it is prudent to unroll the loop at least
+once so that one single-precision RCP instruction can service two
+double-precision iterations. Again, we have been able to rely on the compiler
+to handle this component of the optimization.
+
+We do pay an overhead for the type conversion, in the form of packed-double to
+packed-single vector instructions as well as additional double-precision
+multiplications and additions. There is also an accuracy trade-off, however,
+with a single Newton Raphson iteration, we observed an L2 norm and maximum
+residual with the same order of magnitude as the variant of our code which uses
+division instructions.
+
+We found this optimization to be beneficial when executing in serial on a
+single processing unit. Our results from parallel runs indicate that we can not
+statistically distinguish any impact from this optimization when running in
+parallel. We did find that, both in serial and in parallel, the RCPPS
+optimization had a negative effect when combined with the cached-divide
+optimization. See Section \ref{} and Figure \ref{} for further discussion of
+these results.
+
 \subsection{Batching Strategy}
 
 In the applications described in \S\ref{sec:intro} we need to apply TDMA
