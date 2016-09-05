@@ -1610,12 +1610,58 @@ tile width in our discussion of this parameter sweep.
 
 %===========================================================================
 \section{Conclusion}
+We have introduced an approach to maximize throughput and memory
+  performance of vectors of different small, tridiagonal matrix solves.
+These arise in a number of scientific application contexts, and could
+  be an important component of numerical linear algebra libraries.
+We have demonstrated that a number of trade-offs exist: between tile size,
+  data layout, vectorization features (division, reciprocal, etc.),
+  and constraints from the memory hierarchy.
+For pre-KNL architectures, we have shown some benefit from an iterative
+  single-precision inverse that reduces instruction latency for divides; 
+  for the KNL architecture that supports vectorized divides, 
+  there was little benefit.
+Across all architectures, the benefit in VTDMA was evident from 
+  memory bandwidth, with improvements over single-matrix MKL ranging 
+  from \fxnote{$XX\%$} of pin bandwidth for IVB and HSW to 
+  \fxnote{$XX\%$} on KNL.
+The sensitivity to tile size clearly showed that L1, L2, and TLB effects
+  need to be considered carefully when exploring the optimization space.
+Changing data layouts between natural \(ijk\) indices and \(kij\) 
+  or \(ikj\) made a substantial difference in performance, 
+  and it was determined that \(ikj\) provides the best 
+  \fxnote{$XX\%$} improvement.
+Overall, the difference between a naive loop and MKL implementation,
+  and one optimized for vectorization and memory hierarchy on KNL 
+  can be as much as \fxnote{$XX\%$}.
 
 \section{Future Work}
+A number of possible research directions are possible from VTDMA.
+The existing algorithm is directly applicable to block-tridiagonal matrices,
+  where diagonal and off-diagonal blocks can be solved simultaneously
+  to accelerate larger, distributed matrix solves.
+This would also be the basis for better strong scaling by tiling in
+  the vertical $k$ direction as well, and potentially smaller
+  tile sizes overall. 
+The current algorithm needs to be extended to include matrix assembly
+  based on solution values, and put inside a fully non-linear iteration
+  with a Jacobian calculation, such as used in Newton iterations;
+  the challenge here is that some columns may converge faster than
+  others, and vector masks or scalar iterative refinement may be required.
+Opportunities to extend the algorithm to banded matrices and ILU-type 
+  algorithms are straight-forward for diagonally-dominant cases, but
+  pivoting has the potential to hinder vectorization if not carefully
+  implemented.
+Finally, a more complex application would involve other operations,
+  such as traditional ``stencil'' finite difference operations and
+  time integration algorithms; it remains to be seen if there are
+  performance trade-offs between \(ijk\) and \(ikj\) in 
+  these applications.
+This is particularly important for unstructured mesh applications,
+  where mesh partitioning usually provide only \(ik\) 
+  data alignment to applications.
 
-\fxnote{Paragraph about rolling matrix}
-
-\fxnote{Paragraph discussing combining the matrix build into the kernel}
+\fxnote{Bryce: Sentence about rolling matrix?}
 
 % Need a section explaining tile size / tile storage size
 
