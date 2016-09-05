@@ -171,6 +171,7 @@ We conclude that the approach is effective at optimizing both vectorization
 
 %===========================================================================
 \section{Introduction}
+\label{sec:intro}
 % 
 One important class of problems in computational science is the solving
   of smaller-dimensional matrix subproblems that are duplicated across
@@ -188,7 +189,7 @@ Examples here include atmospheric radiation~\cite{RRTMG_2008}, groundwater
   cloud convection~\cite{SAM_2005}; and
 \item Implicit solvers that need to couple these kinds of subsystems, 
   such as line relaxation~\cite{TrottenbergEtAl_2000} and 
-  semi-implicit time integrators~\cite{PaznerEtAl_2016}.
+  semi-implicit time integrators~\cite{WellerEtAl_2013}.
 \end{itemize}
 In most cases, these matrices are relatively small 
   (ranging from $O(10-100)$ chemistry components or ``levels'' 
@@ -220,15 +221,16 @@ To this end, we have developed a model matrix kernel that mimics what
   is encountered in these kinds of large-scale simulations.
 Key aspects of the code include:
 \begin{itemize}
-\item Matrix systems that must be created and solved
-  at each point in a two-dimensional subdomain (represented by $(i,j)$ indices)
-  of a three-dimensional application (that is, $(i,j,k)$ indices).
-\item Each matrix is tri-diagonal, and must be solved for all $O(30-100)$
-  values in the $k$ index.
+\item A three-dimensional application (that is, $(i,j,k)$ indices),
+  where different matrix systems in the $k$ index are
+  generated at each $(i,j)$ location. 
+\item Each matrix is tri-diagonal, and must be solved for all 
+  $nk \sim O(30-100)$ values in the $k$ direction.
 \item The matrix is derived from finite difference discretization for the
-  1D diffusion equation, which allows it to be solved without pivoting
-  (pivoting will be addressed in future work).
+  1D diffusion equation, which allows it to be solved \emph{without pivoting}.
 \end{itemize}
+We note that pivoting and sparsity patterns are often application-specific;
+  these requirements will be addressed in future work.
 
 %===========================================================================
 \section{Related Work}
@@ -239,12 +241,13 @@ Many implementations simply solve each matrix in parallel or for multiple
   implementations of LAPACK, such as Intel's Math Kernel Library~\cite{mkl_website}
   or NVIDIA's cuBLAS~\cite{cublas_website} implementations.
 In many cases, there is a benefit from vectorization and thread parallelism, 
-  but there may be overheads that reduce performance such as data copies
-  into local arrays, dynamic determination of optimal performance parameters, 
-  partially vectorized ``peel'' loops, etc.~\cite{??}.
-Some specialized approaches include specialized linear algebra-specific 
+  but there may be overheads that reduce performance, such as data copies/
+  temporary variables, 
+  dynamic determination of optimal performance parameters, 
+  and partially vectorized ``peel'' loops, for example.
+Some specialized approaches include linear algebra-specific 
   compilers for small problem sizes and target architectures 
- ~\cite{Spampinato:2014, ??} \fxnote{(add build-to-order ref, Siek/Jessup?)}.
+ ~\cite{Spampinato:2014, NelsonEtAl_2015}.
 Other libraries like 
   \emph{Blaze}~\cite{BlazeSite}, 
   \emph{PLASMA}~\cite{PLASMASite},
@@ -252,12 +255,10 @@ Other libraries like
   \emph{libxsmm}~\cite{libxsmm_website}
   are intended to support SIMD vectorization for standard vector sizes
   as well as batched computation for sparse and dense matrices.
-Overall, there is a gap in approaches that both have vectorization,
+Overall, there is a gap in approaches that have both effective vectorization,
   regardless of matrix size, with or without dense/sparse/pivoting 
   assumptions, amortizing factorization across multiple right-hand-sides, 
   and other assumptions.
-\\
-\fxnote{(Hans - fill in more background / details on these.)}
 
 %===========================================================================
 \section{Implementation}
@@ -334,7 +335,7 @@ for (auto k = n - 2 ; k >= 0; --k) {
 } 
 \end{lstlisting}
 
-\fxnote{Paragraph describing AI}
+\fxnote{Bryce: Paragraph describing AI}
 
 \subsection{Division Optimizations}
 
@@ -377,9 +378,9 @@ for (auto k = n - 2 ; k >= 0; --k) {
 } 
 \end{lstlisting}
 
-\fxnote{Paragraph discussing the changes in AI with cached variant}
+\fxnote{Bryce: Paragraph discussing the changes in AI with cached variant}
 
-\fxnote{Revive the RCPPS optimization section}
+\fxnote{Bryce: Revive the RCPPS optimization section}
 
 %One well-known technique for optimizing floating point divisions is to replace
 %division operations with fast reciprocal estimates (RCP) when possible. On many
@@ -431,8 +432,8 @@ for (auto k = n - 2 ; k >= 0; --k) {
 % Maybe call this Algorithmic Strategy?
 \subsection{Batching Strategy}
 
-In the applications described in Section~\ref{??}, we need to compute the
-solution to a tridiagonal system via the Thomas algorithm on each vertical
+In the applications described in \S\ref{sec:intro} we need to apply TDMA
+on each vertical
 (e.g. $z$) column in a $nx \times ny \times nz$ Cartesian grid (Figure~\ref{1}).
 These computations are known as the \textbf{vertical solves}. The matrix
 coefficients for each column depend on the problem state, so a unique matrix
@@ -1573,11 +1574,12 @@ tile width in our discussion of this parameter sweep.
 %===========================================================================
 \section*{Acknowledgments}
 
-\fxnote{Add Intel IPCC acknowledgments}
-
 This material is based upon work supported by the U.S. Department of Energy, Office of Science, Advanced Scientific Computing Research, Scientific Discovery through Advanced Computing (SciDAC) program.
-This research used resources in Lawrence Berkeley National Laboratory and the National Energy Research Scientific Computing Center, which are supported by the U.S. Department of Energy Office of Science's Advanced Scientific Computing Research program under contract number DE-AC02-05CH11231.  
-This research used resources in Louisiana State University's Center for Computation and Technology. \fxnote{Check with Adrian if there's wording here that LSU likes}
+This work was partially supported by the Intel Parallel Computing Center at
+Lawrence Berkeley National Laboratory,
+and used resources at the National Energy Research Scientific Computing Center, which are supported by the U.S. Department of Energy Office of Science's Advanced Scientific Computing Research program under contract number DE-AC02-05CH11231.  
+This research used resources in Louisiana State University's Center for Computation and Technology. 
+\fxnote{Bryce: Check with Adrian if there's wording here that LSU likes}
 
 %This research used resources of the National Energy Research Scientific Computing Center (NERSC), which is supported by the Office of Science of the U.S. Department of Energy under contract DE-AC02-05CH11231.
 %This research used resources of the Argonne Leadership Computing Facility at Argonne National Laboratory, which is supported by the Office of Science of the U.S. Department of Energy under contract DE-AC02-06CH11357.
