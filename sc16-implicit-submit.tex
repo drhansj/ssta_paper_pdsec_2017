@@ -1,4 +1,4 @@
-\documentclass[conference]{IEEEtran}
+\documentclass{sig-alternate-05-2015}
 
 % Fix to revert the changes IEEEtran makes to table caption styles
 \usepackage{etoolbox}
@@ -87,15 +87,23 @@ xleftmargin=0.1cm,
 % author names and affiliations
 % use a multiple column layout for up to three different
 % affiliations
+\numberofauthors{1}
 \author{
-\IEEEauthorblockN{Bryce Adelstein Lelbach, Hans Johansen, and Samuel Williams}
-\IEEEauthorblockA{Computational Research Division, Lawrence Berkeley National Laboratory, Berkeley, CA 94720\\ {\it \{balelbach, hjohansen, swwilliams\}@lbl.gov}}
+\alignauthor
+Bryce Adelstein Lelbach, Hans Johansen, and Samuel Williams\\
+\affaddr{Computational Research Division}\\
+\affaddr{Lawrence Berkeley National Laboratory}\\
+\affaddr{Berkeley, CA 94720}\\
+\email{{\it \{balelbach, hjohansen, swwilliams\}@lbl.gov}}
+}
+% \IEEEauthorblockN{Bryce Adelstein Lelbach, Hans Johansen, and Samuel Williams}
+% \IEEEauthorblockA{Computational Research Division, Lawrence Berkeley National Laboratory, Berkeley, CA 94720\\ {\it \{balelbach, hjohansen, swwilliams\}@lbl.gov}}
 %\and
 %\IEEEauthorblockN{Homer Simpson}
 %\IEEEauthorblockA{Twentieth Century Fox\\
 %Springfield, USA\\
 %Email: homer@thesimpsons.com}
-}
+% }
 
 % conference papers do not typically use \thanks and this command
 % is locked out in conference mode. If really needed, such as for
@@ -167,7 +175,7 @@ We conclude that the approach is effective at optimizing both vectorization
 %
 % For peerreview papers, this IEEEtran command inserts a page break and
 % creates the second title. It will be ignored for other modes.
-\IEEEpeerreviewmaketitle
+% \IEEEpeerreviewmaketitle
 
 %===========================================================================
 \section{Introduction}

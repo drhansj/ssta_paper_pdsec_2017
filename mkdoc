@@ -1,0 +1,8 @@
+#!/bin/bash -f
+# Start with a LaTeX document and produce a DVI and PostScript version.
+export TEX=sc16-implicit-submit
+pdflatex $TEX.tex
+bibtex $TEX
+pdflatex $TEX.tex
+pdflatex $TEX.tex
+
