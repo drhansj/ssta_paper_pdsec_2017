@@ -242,6 +242,7 @@ We note that pivoting and sparsity patterns are often application-specific;
 
 %===========================================================================
 \section{Related Work}
+{\color{red} TRIM AND MERGE UP \\
 Approaches to solving large numbers of small matrices have been done
   in a variety of contexts.
 Many implementations simply solve each matrix in parallel or for multiple
@@ -267,7 +268,7 @@ Overall, there is a gap in approaches that have both effective vectorization,
   regardless of matrix size, with or without dense/sparse/pivoting 
   assumptions, amortizing factorization across multiple right-hand-sides, 
   and other assumptions.
-
+}
 %===========================================================================
 \section{Implementation}
 
@@ -322,6 +323,7 @@ vector. We will also solve for $u^{s+1}$ in-place, overwriting $u^{s}$.
 % (so our system is $Au$).
 
 % Citation here is elementary numerical analysis
+{\color{red} CUT, FIX FOR FLOW \\
 The in-place Thomas algorithm consists of two passes~\cite{QuarteroniEtAl2007}. 
 First, a forward pass is performed to eliminate the $a_i$ elements:
 
@@ -362,6 +364,7 @@ division. This adds either 2 FLOPs or 3 FLOPs, or a total of either \(2(nk-1)\)
 FLOPs (FMA) or \(3(nk-1\) FLOPs (non-FMA). Summing all the counts up, this
 gives us either \(3(nk-1)+2(nk-1)+1=5nk-4\) FLOPs (FMA) or
 \(5(nk-1)+3(nk-1)+1=8nk-7\) FLOPs (non-FMA) for the entire Thomas algorithm.
+}
 
 Now let us consider the amount of data moved from and to main memory during
 execution of the Thomas algorithm.  We assume that we will achieve optimal
@@ -372,6 +375,7 @@ in the backward substitution loop for example). Our performance model also make
 the stronger assumption that the arrays \(a\), \(b\), \(c\) and \(u\) will be
 cached in between the forward elimination loop and the back substitution loop.
 
+{\color{red} CUT, FIX FOR FLOW \\
 Thus, we take a more macro approach to counting data movement. The algorithm
 accesses four arrays, reading from all of them and writing to two of them
 (\(b\), \(u\)). Two of the arrays have extent \(nk-1\), and have extent \(nk\).
@@ -380,6 +384,7 @@ have extent \(nk\), so we write \(2nk\) elements. In total, \(2nk+4nk-2=6nk-2\)
 elements are moved. Assuming double precision, this means
 \((6nk-2)\)\lstinline{sizeof(double)}\(=48nk-16\) bytes are moved from main
 memory during the execution of the Thomas Algorithm.
+}
 
 This gives us a FLOPs/byte ratio of \((5nk-4)/(48nk-16)\) (FMA) or
 \((8nk-7)/(48nk-16)\) (non-FMA). The lower bound for the Thomas algorithm's AI
@@ -389,10 +394,11 @@ limit as \(nk\) approaches infinity) is \(5/48\) FLOPS/byte (FMA) or \(1/6\)
 FLOPs/byte (non-FMA).
 
 Although some of the optimizations described in this paper slightly increase the
-ratio (e.g. the division optimizations described in Section \ref{}), the order of
-magnitude does not change.
+ratio (e.g. the division optimizations described in \S\ref{sec:divopt}), 
+the order of magnitude does not change.
 
 \subsection{Division Optimizations}
+\label{sec:divopt}
 
 % 1st Reference here is Intel Optimization Manual, 11.12
 % 2nd Reference here is the intrinsic manual
@@ -439,6 +445,7 @@ for (auto k = n - 2 ; k >= 0; --k) {
 This optimization slightly increases the number of FLOPs performed by the
 Thomas algorithm, although the amount of data movement remains unchanged.
 
+{\color{red} CUT AGGRESSIVELY, JUST LEAVE A LITTLE ALGO DESCRIPTION \\
 One well-known technique for optimizing floating point divisions is to replace
 division operations with fast reciprocal estimates (RCP) when possible. On many
 platforms where floating point division operations are not pipelined, floating
@@ -482,6 +489,7 @@ multiplications and additions. There is also an accuracy trade-off, however,
 with a single Newton Raphson iteration, we observed an L2 norm and maximum
 residual with the same order of magnitude as the variant of our code which uses
 division instructions.
+}
 
 We found this optimization to be beneficial when executing in serial on a
 single processing unit. Our results from parallel runs indicate that we can not
@@ -547,6 +555,7 @@ LAPACK has no routine for Thomas-style tridiagonal solves - dgtsv is
 generalized, does actual Gaussian eliminiation and may do pivoting. Also
 mention somewhere that MKL does not parallelize dgtsv.}
 
+{\color{red} CUT REDUNDANT WITH INTRO \\
 The vector parallelism exposed by the simultaneous approach offers a major
 benefit over the independent approach, since it is not possible to vectorize
 most of the kernels in the independent approach due to data dependencies
@@ -556,6 +565,7 @@ so. The extent of the vertical dimension tends to be very small in the
 applications we are concerned with\fxnote{HOW SMALL}. Vectorizing in the
 horizontal dimensions allows us to control locality and loop trip counts via
 tiling.
+}
 
 \subsection{Data Layout}
 
@@ -585,6 +595,7 @@ production codebase allocates a temporary buffer, copies data from the grid
 into the buffer, calls the LAPACK solver, and then copies the result from the
 temporary buffer back to the grid.
 
+{\color{red} CUT-MERGE LEARNINGS IN NEXT \S~\ref{sec:tiling} \\
 Initially, we investigated switching to the \(kji\) layout, which would give us
 contiguous vertical columns that could be passed into LAPACK and allow us to
 remove these temporary buffer allocations. We observed a noticeable performance
@@ -607,8 +618,10 @@ The next layout we investigated, the \(ikj\) layout, arose as a solution to
 translation lookaside buffer (TLB) performance issues that we encountered after
 developing and studying a tiling abstraction for our solver. It is described in
 greater detail in the next section.
+}
 
 \subsection{Tiling}
+\label{sec:tiling}
 
 \fxnote{Elaborate on distinction between entire tile/per array tile.}
 
@@ -647,6 +660,7 @@ dimensions (\(i\)) is the unit stride dimension, the other horizontal dimension
 (\(j\)) has the next smallest stride and the vertical dimension (\(k\)) has the
 greatest stride.
 
+{\color{red} CUT MOST OF DISCUSSION, JUST STATE OPTIONS \\
 We decided to only tile in one of the horizontal dimensions (\(j\), the
 non-unit stride horizontal dimension), to minimize the number of non-contiguous
 memory regions in each tile. Consider two different tiling regimes: the "tile
@@ -680,6 +694,7 @@ width of the target platform. In practice, our vectorizing compiler typically
 unrolls the loops in NAMEFORALGO after vectorization to amortize loop overheads
 and fully utilize the vector register file. Thus, we typically use 2 or 4 times
 the vector width as the minimum \(i\) dimension. 
+}
 
 We used the \(ijk\) layout and the "tile \(j\)" scheme for much of our initial
 work. Part of our work was to study the effect of tile size on application
@@ -716,9 +731,10 @@ too large to fit into the L3 cache (see Figure \ref{}), although on
 microarchitectures with a shared L3 cache we did not see this effect in our
 single core results (see Figure \ref{}). Our 
 
+{\color{red} CUT MOST OF EXPERIMENT PATH, JUST STATE BEST OPTIONS, WHY \\
 However we were intrigued to find that, across multiple microarchitectures, the
 tile size which gave the best performance was often a tile size which did
-\emph{not} fit into the L2 cache (see Figure \ref{}). The optimal tile size for
+\emph{not} fit into the L2 \fxnote{(L1?)}cache (see Figure \ref{}). The optimal tile size for
 the \(ijk\) layout version of NAMEFORALGO was usually either equal to or
 slightly larger than the size of the L2 (see Figure \ref{}). Note that if the
 tile size is equal to the size of the cache, we would not consider it to be
@@ -777,6 +793,7 @@ Naturally, this led us to the \(ikj\) layout, where the horizontal dimension
 smallest stride and the horizontal dimension \(j\) has the greatest unit
 stride. We still use a "tile \(j\)" scheme, however, now our tiles are one
 contiguous region instead of a set of \(z\) planes.
+}
 
 \fxnote{Interesting decision between ikj iteration vs ijk iteration in the ikj layout. May want to talk about that.}
 
@@ -816,6 +833,8 @@ that:
 \item \textbf{Vertical Conflict} Elements of the same array which share the same \(ij\) indices map to different cache sets.
 \end{itemize}
 
+
+{\color{red} SIMPLIFY / CONDENSE, MOVE DETAILS TO APPENDIX/README \\
 As described in the previous section, we expected the optimal tile size for
 NAMEFORALGO to be small enough to fit into the L2 cache, so our cache conflict
 considerations only account for L1D and L2 cache conflict misses. Note the
@@ -972,6 +991,7 @@ misses on element accesses on adjacent levels (e.g. \(u[i-1], b[i-1]\)). These
 may be due to L1D vertical conflicts, although they could also be explained by
 insufficient hardware prefetching. We intend to investigate this effect and the
 impact of \(LinePadding\) in the future.
+}
 
 %===========================================================================
 \section{Experimental Setup}
@@ -984,6 +1004,7 @@ components and a test harness.
 
 \subsection{Test Problem}
 
+{\color{red} REPLACE WITH EXACT MATRIX / STENCIL \\
 The benchmarks in TSB solve the following one-dimensional diffusion equation in
 each vertical column of a 3D Cartesian grid using the implicit Backward Time,
 Centered Space (BTCS) finite difference method:
@@ -1005,7 +1026,9 @@ u(k, t) = e ^ (-D * N^2 * \pi^2 * t) * sin(N * \pi * k)
 An identical form of the problem is initialized in every vertical column of the
 3D grid. To verify numerical correctness, we compute the L2 norm and residual
 vector for each vertical column solve.
+}
 
+{\color{red} THIS SHOULD BE MOVED UP INTO TILING /INTRO SECTION \\
 Square and cubic problems tend to have limited flexibility in how they can be
 decomposed into equally-sized chunks of work, which can be problematic for a
 benchmark where we wish to explore different degrees of parallelism and
@@ -1019,9 +1042,11 @@ lower bound on the tile size and completely controls the loop trip count for
 the inner-most unit-stride loop. We cannot use the vertical extent as a
 tile-size control because the number of vertical levels is largely determined
 by the physics of the production code.
+}
 
 \subsection{Constant Parameters}
 
+{\color{red} CONVERT TO SMALL TABLE IN APPENDIX \\
 We held most of the parameters of the test problem constant when producing the
 results presented in this paper. A summary of the constant parameters and the
 rationale behind their value follows.
@@ -1035,10 +1060,10 @@ conflicts when we picked a power of 2 for nj. For nk, we believe 32 elements is
 a reasonable lower bound for the number of vertical levels that would be used
 in our production climate code. The production codebase currently uses boxes
 with horizontal extents which are somewhat greater than 32 (\(O(64-256)\)).
-However, since ni dictates the minimum tile size in our tile-j scheme, we
+However, since $ni$ dictates the minimum tile size in our tile-j scheme, we
 wanted to pick a smaller quantity to ensure that we were able to full explore
 the space of possible tile sizes. 
-\item The horizontal extent nj was set to \(2^14*3^2=147456\). Our target Ivy
+\item The horizontal extent $nj$ was set to \(2^14*3^2=147456\). Our target Ivy
 Bridge platform (see Table \ref{tab:test_platforms}) has 12 processing units
 per socket, so it was necessary to ensure that nj was divisible by 3 so that we
 would have an even, static division of work among processing units after
@@ -1065,6 +1090,7 @@ bytes and PlanePadding was computed as 2176 bytes. The plane padding storage
 overhead (\(nz*PlanePadding\)) on Ivy Bridge/Haswell was 36KB. On Knight's
 Landing it was 68KB.
 \end{itemize}
+}
 
 The independent variables in our experiments were tile size (controlled by tile
 width), number of processing units (discussed below in Section \ref{}) and
@@ -1072,6 +1098,7 @@ solver variant. The next section discusses the different solver strategies
 available in TSB, a subset of which were used in the experiments described in
 this paper.
 
+{\color{red} CONVERT TO TABLE IN APPENDIX \\
 \subsection{TSB Variants}
 
 \begin{table*}%[t]
@@ -1103,9 +1130,11 @@ codebase; code which is shared by different variants is not duplicated.
 The list of possible variant instantiations is long and combinatoric in nature;
 we omit it for brevity, as the description of distinguishing characteristic is
 sufficiently descriptive.
+}
 
 \subsection{Hardware and Software Utilized}
 
+{\color{red} MOVE TO APPENDIX/README \\
 \fxnote{Cleanup PUs/cores}
 
 \begin{table*}[t]
@@ -1192,11 +1221,13 @@ mode allows users to run applications on Knight's Landing without any
 modifications to address NUMA effects or utilize MCDRAM. We were interested in
 investigating the performance of this particular mode as we believe it is the
 best effort for adoption of the microarchitecture.
+}
 
 \fxnote{Mention Hybrid Mode}
 
 \subsection{Parallelization and Thread Pinning}
 
+{\color{red} CUT TO 1pp/MOVE TO README \\
 The TSB variants used in the work described in this paper are parallelized
 using simple OpenMP pragmas. The problem is embarrassingly parallel; there is
 no dependency or data exchange whatsoever between different columns during the
@@ -1231,9 +1262,11 @@ between different hardware-threads on a processing unit. E.g. we wanted to bind
 each OS-thread to a particular hardware-thread on a core, instead of binding
 each OS-thread to an entire core. We used hwloc~\cite{}, an affinity and
 topology framework, to achieve the desire thread pinning.
+}
 
 \subsection{Toolchain}
 
+{\color{red} CUT EXCEPT FOR RESULTS \\
 TSB is written in ISO C++14 and has no external software dependencies. The code
 contains no vector intrinsics or vector assembly. We rely entirely on the
 compiler vectorization engine for correct vector code generation, utilizing
@@ -1267,6 +1300,7 @@ Amplifier profiler in our research. Both tools are sampling profilers that can
 gather data and analyze data from hardware-based performance monitoring
 facilities. We used Version A of Intel Vectorization Advisor and Version B of
 Intel VTune Amplifier.
+}
 
 %===========================================================================
 \section{Results}
@@ -1312,7 +1346,7 @@ tile width in our discussion of this parameter sweep.
 \begin{figure}[!bt]
     \centering
     \label{fig:r0}
-    \caption{Lorem ipsum}
+    \caption{\color{red} REMOVE PERMUTATIONS/COLLAPSE TO 1 PLOT/JUST PICK BEST TILE SIZE TO COMPARE}
     \subfloat[
         Lorem ipsum 1
     ]{
@@ -1333,7 +1367,7 @@ tile width in our discussion of this parameter sweep.
     }
     \hspace{0mm}
     \label{fig:r1}
-    \caption{Lorem ipsum}
+    \caption{\color{red} REMOVE PERMUTATIONS/COLLAPSE TO 1 PLOT/JUST PICK BEST TILE SIZE TO COMPARE}
     \subfloat[
         Lorem ipsum 4
     ]{
@@ -1379,21 +1413,21 @@ tile width in our discussion of this parameter sweep.
 \begin{figure}%[!bt]
     \centering
     \label{fig:r0}
-    \caption{Lorem ipsum}
+    \caption{\color{red} COLLAPSE 3-4-5 TO 1 PLOT}
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_carl_knl_7210_09_03_2016_64pus.pdf}
 \end{figure}
 
 \begin{figure}%[!bt]
     \centering
     \label{fig:r0}
-    \caption{Lorem ipsum}
+    \caption{\color{red} COLLAPSE 3-4-5 TO 1 PLOT}
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_edison_ivb_e5_2695_v2_09_03_2016_09_04_2016_12pus.pdf}
 \end{figure}
 
 \begin{figure}%[!bt]
     \centering
     \label{fig:r0}
-    \caption{Lorem ipsum}
+    \caption{\color{red} COLLAPSE 3-4-5 TO 1 PLOT}
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_cori_hsw_e5_2698_v3_09_03_2016_09_04_2016_16pus.pdf}
 \end{figure}
 
@@ -1851,7 +1885,29 @@ This research used resources in Louisiana State University's Center for Computat
 %\item Performance with 2,3,4 hyperthreads...  maybe just prose comments?
 %\item effect of kdim != pow(2)... maybe just prose comments?
 %\end{enumerate}
+\newpage
+\section*{TODO}
 
+\fxnote{from SAM: I think the paper/abstract should respond to a few points in 
+their topics of interest...}
+\begin{itemize}
+\item Performance evaluation and lessons learnt \\
+  == Early/First examination of KNL for climate codes
+\item Extensions to and shortcomings of current accelerator directives APIs \\
+  == some comment on observation that compilers are unable to see beyond OMP on
+a column and realize a loop transformations (for vectorization) across multiple
+columns can be performed.
+\item Auto-tuning and optimization strategies \\
+  == tuning tile sizes / caching divides / etc...
+\end{itemize}
+
+\fxnote{HANS: Most of the length is due to two competing goals for the paper: 
+  an optimization process, or a benchmark. Skip the benchmark for now \dots}
+
+\fxnote{SAM/HANS: is anything learned from single-core results here? Drop?}
+
+\fxnote{HANS: where is the discussion of how the B/W is calculated? 
+  Where are the wallclock times?}
 
 \end{document}
 
