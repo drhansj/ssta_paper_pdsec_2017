@@ -210,7 +210,7 @@ Thus, because these are often non-linear matrix systems with space- and
   as a model matrix performance test.
 This prevents amortizing setup and factorization costs
   across multiple right-hand side solves as in 
-  \emph{DGTTRS}~\cite{IntelMKL_DGTTRS},
+  \lstinline{dgtsv}~\cite{IntelMKL_DGTSV},
   and also challenges SIMD vectorization due to the odd size and
   dissimilar entries of the matrices, as well as the 
   memory access patterns relative to the bigger simulation data layout.
@@ -393,111 +393,117 @@ is \(1/32\) FLOPs/byte (for both FMA and non-FMA architectures) when \(nk=1\)
 limit as \(nk\) approaches infinity) is \(5/48\) FLOPS/byte (FMA) or \(1/6\)
 FLOPs/byte (non-FMA).
 
-Although some of the optimizations described in this paper slightly increase the
-ratio (e.g. the division optimizations described in \S\ref{sec:divopt}), 
-the order of magnitude does not change.
+%Although some of the optimizations described in this paper slightly increase the
+%ratio (e.g. the division optimizations described in \S\ref{sec:divopt}), 
+%the order of magnitude does not change.
 
-\subsection{Division Optimizations}
-\label{sec:divopt}
-
-% 1st Reference here is Intel Optimization Manual, 11.12
-% 2nd Reference here is the intrinsic manual
-When we analyzed implementations of the Thomas algorithm as described above, we
-observed that while the it is primary memory-limited, performance could be
-sensitive to the latency of the floating point divisons present in the
-algorithm. Vectorized floating point operations which use the division
-execution unit (divides, fast reciprocal estimation, square root) are not
-pipelined on many mainstream architectures, including Intel SSE, AVX and AVX2
-platforms~\cite{}. Thus, these operations have very high latency (43 cycles for
-an AVX 256-bit double-precision divide on Sandy Bridge; 35 cycles on Ivy Bridge
-and Haswell~\cite{}) and low throughput relative to other floating point
-operations such as multiplication and addition.
-
-Variants of the TDMA algorithm have been developed to minimize 
-  divides~\cite{QuarteroniEtAl2007} by caching them in temporary variables.
-Our approach is to compute and store temporary reciprocal values in the
-diagonal vector \(b\), which removes the division in the backwards 
-substitution pass. We call this the
-\textbf{cached-divide} in-place TDMA algorithm. The forward elimination pass
-becomes:
-
-\begin{lstlisting}
-b[0] = 1.0 / b[0];
-
-for (auto k = 1; k < n; ++k) {
-  auto const m = a[k] * b[k - 1];
-  b[k] = 1.0 / (b[k] - m * c[k - 1]);
-  u[k] = u[k] - m * u[k - 1];
-} 
-\end{lstlisting}
-
-The backwards substitution pass becomes:
-
-\begin{lstlisting}
-u[n - 1] = u[n - 1] * b[n - 1];
-
-for (auto k = n - 2 ; k >= 0; --k) {
-  u[k] = (u[k] - c[k] * u[k + 1]) * b[k];
-} 
-\end{lstlisting}
-
-% Could have said more here.
-This optimization slightly increases the number of FLOPs performed by the
-Thomas algorithm, although the amount of data movement remains unchanged.
-
-{\color{red} CUT AGGRESSIVELY, JUST LEAVE A LITTLE ALGO DESCRIPTION \\
-One well-known technique for optimizing floating point divisions is to replace
-division operations with fast reciprocal estimates (RCP) when possible. On many
-platforms where floating point division operations are not pipelined, floating
-point RCP operations will also not be pipelined, however they generally have
-much lower latency and higher throughput than division operations. Many
-optimizing compilers will transparently and reliable perform this optimization.
-However, there is a caveat on 256-bit AVX and AVX2 platforms (e.g. Sandybridge,
-Ivy Bridge, Haswell and Skylake); no double-precision RCP is available on these
-platforms, although a single-precision RCP instruction is available.
-
-We experimented with the use of a single-precision RCP and Newton Raphson
-iteration to compute a fast division estimation. We are not aware of a compiler
-which provides optionally provides this optimization. To implement the
-optimization, we simply type cast the double-precision values to
-single-precision, perform a division operation, cast back to double-precision
-and then preform Newton Raphson iterations (at double precision). We rely on
-the compiler to replace the division with an RCP instruction.
-
-\begin{lstlisting}
-template <std::size_t NRIterations = 1>
-double nr_rcp_divide(double num, double den) {
-  double x = float(1.0) / float(den);
-
-  for (auto i = 0; i < NRIterations; ++i)
-    x = x + x * (1.0 - den * x);
-
-  return num * x;
-}
-\end{lstlisting}
-
-Since the single-precision RCP instruction will operate on twice as many values
-as a double-precision division from the same instruction set, when our division
-estimate is used in a vectorized loop it is prudent to unroll the loop at least
-once so that one single-precision RCP instruction can service two
-double-precision iterations. Again, we have been able to rely on the compiler
-to handle this component of the optimization.
-
-We do pay an overhead for the type conversion, in the form of packed-double to
-packed-single vector instructions as well as additional double-precision
-multiplications and additions. There is also an accuracy trade-off, however,
-with a single Newton Raphson iteration, we observed an L2 norm and maximum
-residual with the same order of magnitude as the variant of our code which uses
-division instructions.
-}
-
-We found this optimization to be beneficial when executing in serial on a
-single processing unit. Our results from parallel runs indicate that we can not
-statistically distinguish any impact from this optimization when running in
-parallel. We did find that, both in serial and in parallel, the RCPPS
-optimization had a negative effect when combined with the cached-divide
-optimization. See Section \ref{} and Figure \ref{} for further discussion of
-these results.
+%\subsection{Division Optimizations}
+%\label{sec:divopt}
+%
+%% 1st Reference here is Intel Optimization Manual, 11.12
+%% 2nd Reference here is the intrinsic manual
+%When we analyzed implementations of the Thomas algorithm as described above, we
+%observed that while the it is primary memory-limited, performance could be
+%sensitive to the latency of the floating point divisons present in the
+%algorithm. Vectorized floating point operations which use the division
+%execution unit (divides, fast reciprocal estimation, square root) are not
+%pipelined on many mainstream architectures, including Intel SSE, AVX and AVX2
+%platforms~\cite{}. Thus, these operations have very high latency (43 cycles for
+%an AVX 256-bit double-precision divide on Sandy Bridge; 35 cycles on Ivy Bridge
+%and Haswell~\cite{}) and low throughput relative to other floating point
+%operations such as multiplication and addition.
+%
+%%Variants of the TDMA algorithm have been developed to minimize 
+%%divides~\cite{QuarteroniEtAl2007} by caching them in temporary variables.
+%%Our approach is to compute and store temporary reciprocal values in the
+%%diagonal vector \(b\), which removes the division in the backwards 
+%%substitution pass.
+%
+%In the in-place Thomas algorithm described above, all the division operations
+%have the same divisor - the temporary coefficient computed and stored in the
+%diagonal vector b. If we re-formulate the algorithm to store the reciprocal of
+%that coefficient instead of storing the coefficient itself, we are able to
+%replace the division in the backwards substitution pass with a multiplication.
+%We call this the \textbf{cached-divide} in-place TDMA algorithm. The forward
+%elimination pass becomes:
+%
+%\begin{lstlisting}
+%b[0] = 1.0 / b[0];
+%
+%for (auto k = 1; k < n; ++k) {
+%  auto const m = a[k] * b[k - 1];
+%  b[k] = 1.0 / (b[k] - m * c[k - 1]);
+%  u[k] = u[k] - m * u[k - 1];
+%} 
+%\end{lstlisting}
+%
+%The backwards substitution pass becomes:
+%
+%\begin{lstlisting}
+%u[n - 1] = u[n - 1] * b[n - 1];
+%
+%for (auto k = n - 2 ; k >= 0; --k) {
+%  u[k] = (u[k] - c[k] * u[k + 1]) * b[k];
+%} 
+%\end{lstlisting}
+%
+%% Could have said more here.
+%This optimization slightly increases the number of FLOPs performed by the
+%Thomas algorithm, although the amount of data movement remains unchanged.
+%
+%{\color{red} CUT AGGRESSIVELY, JUST LEAVE A LITTLE ALGO DESCRIPTION \\
+%One well-known technique for optimizing floating point divisions is to replace
+%division operations with fast reciprocal estimates (RCP) when possible. On many
+%platforms where floating point division operations are not pipelined, floating
+%point RCP operations will also not be pipelined, however they generally have
+%much lower latency and higher throughput than division operations. Many
+%optimizing compilers will transparently and reliable perform this optimization.
+%However, there is a caveat on 256-bit AVX and AVX2 platforms (e.g. Sandybridge,
+%Ivy Bridge, Haswell and Skylake); no double-precision RCP is available on these
+%platforms, although a single-precision RCP instruction is available.
+%
+%We experimented with the use of a single-precision RCP and Newton Raphson
+%iteration to compute a fast division estimation. We are not aware of a compiler
+%which provides optionally provides this optimization. To implement the
+%optimization, we simply type cast the double-precision values to
+%single-precision, perform a division operation, cast back to double-precision
+%and then preform Newton Raphson iterations (at double precision). We rely on
+%the compiler to replace the division with an RCP instruction.
+%
+%\begin{lstlisting}
+%template <std::size_t NRIterations = 1>
+%double nr_rcp_divide(double num, double den) {
+%  double x = float(1.0) / float(den);
+%
+%  for (auto i = 0; i < NRIterations; ++i)
+%    x = x + x * (1.0 - den * x);
+%
+%  return num * x;
+%}
+%\end{lstlisting}
+%
+%Since the single-precision RCP instruction will operate on twice as many values
+%as a double-precision division from the same instruction set, when our division
+%estimate is used in a vectorized loop it is prudent to unroll the loop at least
+%once so that one single-precision RCP instruction can service two
+%double-precision iterations. Again, we have been able to rely on the compiler
+%to handle this component of the optimization.
+%
+%We do pay an overhead for the type conversion, in the form of packed-double to
+%packed-single vector instructions as well as additional double-precision
+%multiplications and additions. There is also an accuracy trade-off, however,
+%with a single Newton Raphson iteration, we observed an L2 norm and maximum
+%residual with the same order of magnitude as the variant of our code which uses
+%division instructions.
+%}
+%
+%We found this optimization to be beneficial when executing in serial on a
+%single processing unit. Our results from parallel runs indicate that we can not
+%statistically distinguish any impact from this optimization when running in
+%parallel. We did find that, both in serial and in parallel, the RCPPS
+%optimization had a negative effect when combined with the cached-divide
+%optimization. See Section \ref{} and Figure \ref{} for further discussion of
+%these results.
 
 \subsection{Batching Strategy}
 
@@ -814,184 +820,184 @@ this difference in cache latency explains the poorer performance relative to
 manufacturer-specified bandwidth of the \(ijk\) layout, and thus explains the
 more significant impact of the \(ikj\) layout on the KNL.
 
-\subsection{Mitigating Cache Conflicts}
-
-In addition to to data layout selection and tiling, it was necessary for us to
-mitigate potential data cache conflicts, to ensure optimal cache performance.
-It is necessary to both align and pad the four arrays used in our solver to
-avoid accessing array elements which have addresses that are structurally
-similar enough to be mapped to the same cache set (e.g. two addresses which are
-aligned to the same power of two).
-
-The loops in our algorithm will always access elements of four different arrays
-with the same horizontal (\(ij\)) indices, and will access at most two
-different adjacent vertical (\(k\)) indices. So, to avoid conflicts we must ensure 
-that:
-
-\begin{itemize}
-\item \textbf{Inter-Array Conflicts} Elements of different arrays which have the same \(ijk\) indices map to different cache sets.
-\item \textbf{Vertical Conflict} Elements of the same array which share the same \(ij\) indices map to different cache sets.
-\end{itemize}
-
-
-{\color{red} SIMPLIFY / CONDENSE, MOVE DETAILS TO APPENDIX/README \\
-As described in the previous section, we expected the optimal tile size for
-NAMEFORALGO to be small enough to fit into the L2 cache, so our cache conflict
-considerations only account for L1D and L2 cache conflict misses. Note the
-formula for the size of a set-associative cache (brackets denote units):
-
-\begin{table*}[t]
-\centering
-\caption{\textbf{Formulae for Cache Conflict Mitigation Parameters:}}
-
-\begin{align*}
-CacheSize \: \text{[Bytes]} = Associativity \: \text{[Ways]} * CacheLineSize \: \text{[Bytes]} * NumberOfSets \: \text{[Sets]}
-\end{align*}
-
-\begin{align*}
-BytesPerWay \: \text{[Bytes / Way]} = CacheSize \: \text{[Bytes]} / Associativity \: \text{[Ways]}
-\end{align*}
-
-\begin{align*}
-L1DArrayAlignStep \: \text{[Bytes]} &= L1DBytesPerWay \: \text{[Bytes / Way]} \: / \: 4 \: \text{[Arrays]} \\
-L2ArrayAlignStep \: \text{[Bytes]}  &= L2BytesPerWay \: \text{[Bytes / Way]}  \: / \: 4 \: \text{[Arrays]} \\ 
-ArrayAlignStep \: \text{[Bytes]}    &= L1DArrayAlignStep \: \text{[Bytes]} + L2ArrayAlignStep \: \text{[Bytes]}
-\end{align*}
-
-\begin{align*}
-L1DPlanePadding \: \text{[Bytes]} &= L1DBytesPerWay \: \text{[Bytes / Way]} \: / \: nz \: \text{[\# of Vertical Levels]} \\ 
-L2PlanePadding \: \text{[Bytes]}  &= L2BytesPerWay \: \text{[Bytes / Way]}  \: / \: nz \: \text{[\# of Vertical Levels]} \\
-PlanePadding \: \text{[Bytes]}    &= L1DPlanePadding \: \text{[Bytes]} + L2PlanePadding \: \text{[Bytes]}
-\end{align*}
-
-\begin{align*}
-LinePadding \: \text{[Bytes]} = L1DBytesPerWay \: \text{[Bytes / Way]} \: / \: nz \: \text{[\# of Vertical Levels]}
-\end{align*}
-
-\label{tab:conflict_mitigation_formulae}
-\end{table*}
-
-\begin{table*}[t]
-\centering
-\caption{\textbf{Example Cache Conflict Mitigation Parameters}}
-
-\fxnote{KILL THIS}
-
-\label{tab:example_conflict_mitigation_parameters}
-\end{table*}
-
-To deal conflicts between elements of different arrays with the same
-\(ijk\) indices, we align the base of each array differently. Assuming that all
-the arrays are the same size, this ensures that the elements with the same
-\(ijk\) indices in all four arrays will also be aligned differently. While
-arrays \(b\) and \(c\) technically have one fewer vertical levels than \(u\)
-and \(a\), for simplicity we allocate an equal amount of storage for all four
-arrays. Each array is aligned to \(ArrayBaseAlign+nA*ArrayAlignStep\)
-where \(nA\) is \(0\) for \(u\), \(1\) for \(a\), \(2\) for \(b\) and \(3\) for
-\(c\).
-
-\(ArrayBaseAlign\) should be a power of 2; 1MB is used for all the results
-presented in this paper. \(ArrayAlignStep\) is the sum of two values,
-\(L1DArrayAlignStep\) and \(L2ArrayAlignStep\), which are computed based on the
-properties of the L1D and L2 caches on the target microarchitecture. The formulae
-are shown in Table \ref{tab:conflict_mitigation_formulae}. 
-
-To address conflicts between elements of the same array which have the same
-\(ij\) indices but reside on two separate, adjacent vertical levels, our
-strategy depends on the layout used. For the \(ijk\) layout, we need to add
-padding \(PlanePadding\) at the end of each contiguous horizontal (\(ij\))
-plane to ensure that vertical neighbors are not structural similar (e.g.
-aligned to the same power of 2). \(PlanePadding\) is added to the \(k\) stride,
-e.g. the indexing formula changes from:
-
-\[
-i + nx * j + nx * ny * k
-\]
-
-\noindent to:
-
-\[
-i + nx * j + (nx * ny + PlanePadding) * k
-\]
-
-\noindent \(PlanePadding\) is calculated similar to \(ArrayAlignStep\) (Table \ref{tab:conflict_mitigation_formulae}).
-
-We have found that the storage overhead of \(PlanePadding\) (shown below in
-Table \ref{tab:example_conflict_mitigation_parameters}) is relatively small for
-non-trivial problems. \fxnote{IS THIS TRUE?}
-
-A similar approach could be used to deal with these vertical cache conflicts
-when using the \(ikj\) layout. Instead of adding \(PlanePadding\), we would add
-\(LinePadding\) at the end of each contiguous \(i\) line. The indexing formula
-would change from:
-
-\[
-i + nx * nz * j + nx * k
-\]
-
-to:
-
-\[
-i + (nx + LinePadding) * nz * j + (nx + LinePadding) * k
-\]
-
-In the \(ikj\) layout, the tile for each array is a contiguous region which is
-small enough to fit into the L2 cache along with the tiles from the other three
-arrays, but large enough that it cannot fit into the L1D cache with the other
-three arrays. We should not need to do anything to address L2 vertical
-conflicts for the \(ikj\) layout. Because all the elements are contiguous in
-memory and the per-array tile will fit into the L2, the addresses of the
-elements should already be well-distributed across the sets of the L2 cache.
-\(LinePadding\) only needs to consider L1D vertical conflicts. The formula for
-\(LinePadding\) is given in Table \ref{tab:conflict_mitigation_formulae}.
-
-However, there are downsides to applying this technique to the \(ikj\) layout.
-Firstly, \(LinePadding\) will increase the size of the contiguous per-array
-tiles, which might reduce the maximum tile size that can fit into the L2 cache
-and introduce an effect similar to the TLB issue described in Section \ref{} by
-making it infeasible to use tile sizes small enough to fit into the L2 cache.
-
-\(PlanePadding\) for the \(ijk\) layout does not have this issue. In most
-cases, the storage overhead for \(PlanePadding\) is much smaller than the
-storage overhead for \(LinePadding\), even though \(LinePadding\) only needs to
-mitigate L1D conflicts (see Table \ref{}). However, tiles in \(ijk\) layout are
-not contiguous, it should be noted that \(PlanePadding\) will increase the
-stride between non-contiguous regions in the \(ijk\) layout version of
-NAMEFORALGO. 
-
-An example might be illustrative. \(PlanePadding\) for the \(ijk\) layout adds
-\(nz\) contiguous regions containing \(PlanePadding\) padding elements (one region
-at the end of each horizontal \(ij\) plane). Recall that the vertical extent, \(nz\), 
-is typically small \fxnote{HOW SMALL}. \(LinePadding\) for the \(ikj\) layout adds
-\(nx*nz\) contiguous regions containing \(LinePadding\) padding elements (one region
-at the end of each horizontal \(i\) line).
-
-Additionally, we were concerned that the use of \(LinePadding\) might disrupt
-hardware prefetching. In the \(ijk\) layout, we iterate through contiguous
-horizontal \(ij\) planes (with extent \(nx*ny\)), then jump to next plane which
-is in cache but not contiguous with the prior plane (skipping over other
-tiles and \(PlanePadding\) pad elements).
-
-% NOTE: This paragraph assumes that ikj iteration is the correct choice for the
-% ikj layout, which is not something I've actually investigated because I
-% didn't realize it until I started writing this.
-In the \(ikj\) layout, currently we iterate through contiguous horizontal \(i\)
-lines (with extent \(nx\)), then we go to the line at the next vertical level
-which is in cache and contiguous with the prior line (the alternative iteration
-scheme for the \(ikj\) layout described in Section \ref{} is not considered
-here). Adding \(LinePadding\) would mean that we would have to skip over those
-padding elements at the end of each horizontal \(i\) line. This might cause
-prefetching problems as we would no longer be streaming through memory
-contiguously.
-
-We have not yet fully explored the impact of \(LinePadding\) in the \(ikj\)
-versions of NAMEFORALGO. Currently, NAMEFORALGO does not have any mitigation
-mechanism for L1D vertical conflicts. In profiling, we have observed L1D cache
-misses on element accesses on adjacent levels (e.g. \(u[i-1], b[i-1]\)). These
-may be due to L1D vertical conflicts, although they could also be explained by
-insufficient hardware prefetching. We intend to investigate this effect and the
-impact of \(LinePadding\) in the future.
-}
+%\subsection{Mitigating Cache Conflicts}
+%
+%In addition to to data layout selection and tiling, it was necessary for us to
+%mitigate potential data cache conflicts, to ensure optimal cache performance.
+%It is necessary to both align and pad the four arrays used in our solver to
+%avoid accessing array elements which have addresses that are structurally
+%similar enough to be mapped to the same cache set (e.g. two addresses which are
+%aligned to the same power of two).
+%
+%The loops in our algorithm will always access elements of four different arrays
+%with the same horizontal (\(ij\)) indices, and will access at most two
+%different adjacent vertical (\(k\)) indices. So, to avoid conflicts we must ensure 
+%that:
+%
+%\begin{itemize}
+%\item \textbf{Inter-Array Conflicts} Elements of different arrays which have the same \(ijk\) indices map to different cache sets.
+%\item \textbf{Vertical Conflict} Elements of the same array which share the same \(ij\) indices map to different cache sets.
+%\end{itemize}
+%
+%
+%{\color{red} SIMPLIFY / CONDENSE, MOVE DETAILS TO APPENDIX/README \\
+%As described in the previous section, we expected the optimal tile size for
+%NAMEFORALGO to be small enough to fit into the L2 cache, so our cache conflict
+%considerations only account for L1D and L2 cache conflict misses. Note the
+%formula for the size of a set-associative cache (brackets denote units):
+%
+%\begin{table*}[t]
+%\centering
+%\caption{\textbf{Formulae for Cache Conflict Mitigation Parameters:}}
+%
+%\begin{align*}
+%CacheSize \: \text{[Bytes]} = Associativity \: \text{[Ways]} * CacheLineSize \: \text{[Bytes]} * NumberOfSets \: \text{[Sets]}
+%\end{align*}
+%
+%\begin{align*}
+%BytesPerWay \: \text{[Bytes / Way]} = CacheSize \: \text{[Bytes]} / Associativity \: \text{[Ways]}
+%\end{align*}
+%
+%\begin{align*}
+%L1DArrayAlignStep \: \text{[Bytes]} &= L1DBytesPerWay \: \text{[Bytes / Way]} \: / \: 4 \: \text{[Arrays]} \\
+%L2ArrayAlignStep \: \text{[Bytes]}  &= L2BytesPerWay \: \text{[Bytes / Way]}  \: / \: 4 \: \text{[Arrays]} \\ 
+%ArrayAlignStep \: \text{[Bytes]}    &= L1DArrayAlignStep \: \text{[Bytes]} + L2ArrayAlignStep \: \text{[Bytes]}
+%\end{align*}
+%
+%\begin{align*}
+%L1DPlanePadding \: \text{[Bytes]} &= L1DBytesPerWay \: \text{[Bytes / Way]} \: / \: nz \: \text{[\# of Vertical Levels]} \\ 
+%L2PlanePadding \: \text{[Bytes]}  &= L2BytesPerWay \: \text{[Bytes / Way]}  \: / \: nz \: \text{[\# of Vertical Levels]} \\
+%PlanePadding \: \text{[Bytes]}    &= L1DPlanePadding \: \text{[Bytes]} + L2PlanePadding \: \text{[Bytes]}
+%\end{align*}
+%
+%\begin{align*}
+%LinePadding \: \text{[Bytes]} = L1DBytesPerWay \: \text{[Bytes / Way]} \: / \: nz \: \text{[\# of Vertical Levels]}
+%\end{align*}
+%
+%\label{tab:conflict_mitigation_formulae}
+%\end{table*}
+%
+%\begin{table*}[t]
+%\centering
+%\caption{\textbf{Example Cache Conflict Mitigation Parameters}}
+%
+%\fxnote{KILL THIS}
+%
+%\label{tab:example_conflict_mitigation_parameters}
+%\end{table*}
+%
+%To deal conflicts between elements of different arrays with the same
+%\(ijk\) indices, we align the base of each array differently. Assuming that all
+%the arrays are the same size, this ensures that the elements with the same
+%\(ijk\) indices in all four arrays will also be aligned differently. While
+%arrays \(b\) and \(c\) technically have one fewer vertical levels than \(u\)
+%and \(a\), for simplicity we allocate an equal amount of storage for all four
+%arrays. Each array is aligned to \(ArrayBaseAlign+nA*ArrayAlignStep\)
+%where \(nA\) is \(0\) for \(u\), \(1\) for \(a\), \(2\) for \(b\) and \(3\) for
+%\(c\).
+%
+%\(ArrayBaseAlign\) should be a power of 2; 1MB is used for all the results
+%presented in this paper. \(ArrayAlignStep\) is the sum of two values,
+%\(L1DArrayAlignStep\) and \(L2ArrayAlignStep\), which are computed based on the
+%properties of the L1D and L2 caches on the target microarchitecture. The formulae
+%are shown in Table \ref{tab:conflict_mitigation_formulae}. 
+%
+%To address conflicts between elements of the same array which have the same
+%\(ij\) indices but reside on two separate, adjacent vertical levels, our
+%strategy depends on the layout used. For the \(ijk\) layout, we need to add
+%padding \(PlanePadding\) at the end of each contiguous horizontal (\(ij\))
+%plane to ensure that vertical neighbors are not structural similar (e.g.
+%aligned to the same power of 2). \(PlanePadding\) is added to the \(k\) stride,
+%e.g. the indexing formula changes from:
+%
+%\[
+%i + nx * j + nx * ny * k
+%\]
+%
+%\noindent to:
+%
+%\[
+%i + nx * j + (nx * ny + PlanePadding) * k
+%\]
+%
+%\noindent \(PlanePadding\) is calculated similar to \(ArrayAlignStep\) (Table \ref{tab:conflict_mitigation_formulae}).
+%
+%We have found that the storage overhead of \(PlanePadding\) (shown below in
+%Table \ref{tab:example_conflict_mitigation_parameters}) is relatively small for
+%non-trivial problems. \fxnote{IS THIS TRUE?}
+%
+%A similar approach could be used to deal with these vertical cache conflicts
+%when using the \(ikj\) layout. Instead of adding \(PlanePadding\), we would add
+%\(LinePadding\) at the end of each contiguous \(i\) line. The indexing formula
+%would change from:
+%
+%\[
+%i + nx * nz * j + nx * k
+%\]
+%
+%to:
+%
+%\[
+%i + (nx + LinePadding) * nz * j + (nx + LinePadding) * k
+%\]
+%
+%In the \(ikj\) layout, the tile for each array is a contiguous region which is
+%small enough to fit into the L2 cache along with the tiles from the other three
+%arrays, but large enough that it cannot fit into the L1D cache with the other
+%three arrays. We should not need to do anything to address L2 vertical
+%conflicts for the \(ikj\) layout. Because all the elements are contiguous in
+%memory and the per-array tile will fit into the L2, the addresses of the
+%elements should already be well-distributed across the sets of the L2 cache.
+%\(LinePadding\) only needs to consider L1D vertical conflicts. The formula for
+%\(LinePadding\) is given in Table \ref{tab:conflict_mitigation_formulae}.
+%
+%However, there are downsides to applying this technique to the \(ikj\) layout.
+%Firstly, \(LinePadding\) will increase the size of the contiguous per-array
+%tiles, which might reduce the maximum tile size that can fit into the L2 cache
+%and introduce an effect similar to the TLB issue described in Section \ref{} by
+%making it infeasible to use tile sizes small enough to fit into the L2 cache.
+%
+%\(PlanePadding\) for the \(ijk\) layout does not have this issue. In most
+%cases, the storage overhead for \(PlanePadding\) is much smaller than the
+%storage overhead for \(LinePadding\), even though \(LinePadding\) only needs to
+%mitigate L1D conflicts (see Table \ref{}). However, tiles in \(ijk\) layout are
+%not contiguous, it should be noted that \(PlanePadding\) will increase the
+%stride between non-contiguous regions in the \(ijk\) layout version of
+%NAMEFORALGO. 
+%
+%An example might be illustrative. \(PlanePadding\) for the \(ijk\) layout adds
+%\(nz\) contiguous regions containing \(PlanePadding\) padding elements (one region
+%at the end of each horizontal \(ij\) plane). Recall that the vertical extent, \(nz\), 
+%is typically small \fxnote{HOW SMALL}. \(LinePadding\) for the \(ikj\) layout adds
+%\(nx*nz\) contiguous regions containing \(LinePadding\) padding elements (one region
+%at the end of each horizontal \(i\) line).
+%
+%Additionally, we were concerned that the use of \(LinePadding\) might disrupt
+%hardware prefetching. In the \(ijk\) layout, we iterate through contiguous
+%horizontal \(ij\) planes (with extent \(nx*ny\)), then jump to next plane which
+%is in cache but not contiguous with the prior plane (skipping over other
+%tiles and \(PlanePadding\) pad elements).
+%
+%% NOTE: This paragraph assumes that ikj iteration is the correct choice for the
+%% ikj layout, which is not something I've actually investigated because I
+%% didn't realize it until I started writing this.
+%In the \(ikj\) layout, currently we iterate through contiguous horizontal \(i\)
+%lines (with extent \(nx\)), then we go to the line at the next vertical level
+%which is in cache and contiguous with the prior line (the alternative iteration
+%scheme for the \(ikj\) layout described in Section \ref{} is not considered
+%here). Adding \(LinePadding\) would mean that we would have to skip over those
+%padding elements at the end of each horizontal \(i\) line. This might cause
+%prefetching problems as we would no longer be streaming through memory
+%contiguously.
+%
+%We have not yet fully explored the impact of \(LinePadding\) in the \(ikj\)
+%versions of NAMEFORALGO. Currently, NAMEFORALGO does not have any mitigation
+%mechanism for L1D vertical conflicts. In profiling, we have observed L1D cache
+%misses on element accesses on adjacent levels (e.g. \(u[i-1], b[i-1]\)). These
+%may be due to L1D vertical conflicts, although they could also be explained by
+%insufficient hardware prefetching. We intend to investigate this effect and the
+%impact of \(LinePadding\) in the future.
+%}
 
 %===========================================================================
 \section{Experimental Setup}
@@ -1340,54 +1346,54 @@ this experiment, so the tile storage size will often be a power of 2. To
 simplify visualization, we will use tile storage size instead of tile size or
 tile width in our discussion of this parameter sweep.
 
-\begin{landscape}
-\addtolength{\hoffset}{-30pt}
-\addtolength{\voffset}{16pt}
-\begin{figure}[!bt]
-    \centering
-    \label{fig:r0}
-    \caption{\color{red} REMOVE PERMUTATIONS/COLLAPSE TO 1 PLOT/JUST PICK BEST TILE SIZE TO COMPARE}
-    \subfloat[
-        Lorem ipsum 1
-    ]{
-        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_1pus.pdf}
-        \label{fig:r0c0}
-    }
-    \subfloat[
-        Lorem ipsum 2
-    ]{
-        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_1pus.pdf}
-        \label{fig:r0c1}
-    }
-    \subfloat[
-        Lorem ipsum 3
-    ]{
-        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_1pus.pdf}
-        \label{fig:r0c2}
-    }
-    \hspace{0mm}
-    \label{fig:r1}
-    \caption{\color{red} REMOVE PERMUTATIONS/COLLAPSE TO 1 PLOT/JUST PICK BEST TILE SIZE TO COMPARE}
-    \subfloat[
-        Lorem ipsum 4
-    ]{
-        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
-        \label{fig:r1c0}
-    }
-    \subfloat[
-        Lorem ipsum 5
-    ]{
-        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
-        \label{fig:r1c1}
-    }
-    \subfloat[
-        Lorem ipsum 6
-    ]{
-        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
-        \label{fig:r1c2}
-    }
-\end{figure}
-\end{landscape}
+%\begin{landscape}
+%\addtolength{\hoffset}{-30pt}
+%\addtolength{\voffset}{16pt}
+%\begin{figure}[!bt]
+%    \centering
+%    \label{fig:r0}
+%    \caption{\color{red} REMOVE PERMUTATIONS/COLLAPSE TO 1 PLOT/JUST PICK BEST TILE SIZE TO COMPARE}
+%    \subfloat[
+%        Lorem ipsum 1
+%    ]{
+%        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_1pus.pdf}
+%        \label{fig:r0c0}
+%    }
+%    \subfloat[
+%        Lorem ipsum 2
+%    ]{
+%        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_1pus.pdf}
+%        \label{fig:r0c1}
+%    }
+%    \subfloat[
+%        Lorem ipsum 3
+%    ]{
+%        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_1pus.pdf}
+%        \label{fig:r0c2}
+%    }
+%    \hspace{0mm}
+%    \label{fig:r1}
+%    \caption{\color{red} REMOVE PERMUTATIONS/COLLAPSE TO 1 PLOT/JUST PICK BEST TILE SIZE TO COMPARE}
+%    \subfloat[
+%        Lorem ipsum 4
+%    ]{
+%        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
+%        \label{fig:r1c0}
+%    }
+%    \subfloat[
+%        Lorem ipsum 5
+%    ]{
+%        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
+%        \label{fig:r1c1}
+%    }
+%    \subfloat[
+%        Lorem ipsum 6
+%    ]{
+%        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
+%        \label{fig:r1c2}
+%    }
+%\end{figure}
+%\end{landscape}
 
 %\begin{landscape}
 %\addtolength{\hoffset}{-30pt}
@@ -1413,22 +1419,29 @@ tile width in our discussion of this parameter sweep.
 \begin{figure}%[!bt]
     \centering
     \label{fig:r0}
-    \caption{\color{red} COLLAPSE 3-4-5 TO 1 PLOT}
-    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_carl_knl_7210_09_03_2016_64pus.pdf}
+    \caption{Lorem Ipsum}
+    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
 \end{figure}
 
 \begin{figure}%[!bt]
     \centering
     \label{fig:r0}
-    \caption{\color{red} COLLAPSE 3-4-5 TO 1 PLOT}
-    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_edison_ivb_e5_2695_v2_09_03_2016_09_04_2016_12pus.pdf}
+    \caption{Lorem Ipsum}
+    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
 \end{figure}
 
 \begin{figure}%[!bt]
     \centering
     \label{fig:r0}
-    \caption{\color{red} COLLAPSE 3-4-5 TO 1 PLOT}
-    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_cori_hsw_e5_2698_v3_09_03_2016_09_04_2016_16pus.pdf}
+    \caption{Lorem Ipsum}
+    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
+\end{figure}
+
+\begin{figure}%[!bt]
+    \centering
+    \label{fig:r0}
+    \caption{Lorem Ipsum}
+    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_09_03_2016_09_04_2016_1socket.pdf}
 \end{figure}
 
 %\end{landscape}
