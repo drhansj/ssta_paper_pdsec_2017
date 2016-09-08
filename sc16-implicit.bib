@@ -1,3 +1,10 @@
+@misc{tsb_git,
+     author    = {{Bryce Adelstein Lelbach}},
+     title     = {{Tridiagonal Solve Benchmarks suite source code repository}},
+     url       = {http://github.com/brycelelbach/tridiagonal_solve_benchmarks},
+     note      = "Available under the Boost Software License 1.0 (a BSD-style open source license).",
+     year      = {2015-2016}
+}
 
 @techreport{TDMA,
     Author = {Thomas, L.H.},
@@ -25,10 +32,16 @@
 }
 
 
-@misc{Edison_website,
+@misc{edison_configuration,
   key          = {Edison},
-  title        = {{Edison:}},
-  howpublished = {\url{www.nersc.gov/users/computational-systems/edison}}
+  title        = {{NERSC Edison Node Configuration}},
+  howpublished = {\url{http://www.nersc.gov/users/computational-systems/edison/configuration/}}
+}
+
+@misc{cori_phase_1_configuration,
+  key          = {Cori},
+  title        = {{NERSC Cori Phase 1 Node Configuration}},
+  howpublished = {\url{http://www.nersc.gov/users/computational-systems/cori/cori-phase-i/}}
 }
 
 @inproceedings{Spampinato:2014,
@@ -255,6 +268,14 @@ URL = { http://dx.doi.org/10.1175/JAS3453.1 }
  address = {New York, NY, USA},
 }  
 
+@article{roofline_knl,
+  author       = {Douglas Doerfer, Jack Deslippe, Samuel Williams, Leonid Oliker, Brandon Cook, Thorsten Kurth, Mathieu Lobet, Tareq Malas, Jean-Luc Vay, and Henri Vincenti},
+  title        = {Applying the Roofline Performance Model to the Intel Xeon Phi Knights Landing Processor},
+  journal      = {Intel Xeon Phi User Group Workshop},
+  year         = 2016,
+  url = {https://crd.lbl.gov/assets/Uploads/ixpug16-roofline.pdf}
+}
+
 @article{kokkos,
  title = "Kokkos: Enabling manycore performance portability through polymorphic memory access patterns ",
  journal = "Journal of Parallel and Distributed Computing ",
@@ -287,4 +308,28 @@ URL = { http://dx.doi.org/10.1175/JAS3453.1 }
  publisher = {ACM},
  address = {New York, NY, USA},
 } 
+
+@manual{intel_opt_manual,
+  title = {Intel\textregistered 64 and IA-32 Architectures Optimization Reference Manual}
+  edition      = {248966-033},
+  month        = 6,
+  year         = 2016,
+  url          = "http://www.intel.com/content/www/us/en/architecture-and-technology/64-ia-32-architectures-optimization-manual.html"
+}
+
+@misc{intel_ark_xeon_e5_2695_v2, 
+  title = {{Intel Xeon Processor E5-2695 v2 (30M Cache, 2.40 GHz) Specifications}},
+  howpublished = {\url{http://ark.intel.com/products/75281/Intel-Xeon-Processor-E5-2695-v2-30M-Cache-2_40-GHz}}
+}
+
+@misc{intel_ark_xeon_e5_2698_v3, 
+  title = {{Intel Xeon Processor E5-2698 v3 (40M Cache, 2.30 GHz) Specifications}},
+  howpublished = {\url{http://ark.intel.com/products/75281/Intel-Xeon-Processor-E5-2698-v3-40M-Cache-2_30-GHz}}
+}
+
+@misc{intel_ark_xeon_phi_7210, 
+  title = {{Intel Xeon Phi Processor 7210 (16GB, 1.30 GHz, 64 core) Specifications}},
+  howpublished = {\url{http://ark.intel.com/products/94033/Intel-Xeon-Phi-Processor-7210-16GB-1_30-GHz-64-core}}
+}
+
 

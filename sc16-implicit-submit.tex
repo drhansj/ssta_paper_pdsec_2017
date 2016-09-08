@@ -992,38 +992,38 @@ The tile-\(j\) scheme is used with both layouts.
 %===========================================================================
 \section{Experimental Setup}
 \label{sec:experimental_setup:}
-The software described in this paper is a part of the Tridiagonal Solve
-Benchmarks collection. The TSB collection is freely available on Github under
-the Boost Software License, version 1.0. Revision WHATEVER contains the source
-code used for the experiments in this paper. The benchmark suite has three
-major components: a multi-dimensional array abstraction, generic solver
-components and a test harness.
+We developed the Tridiagonal Solve Benchmarks (TSB) suite during the course of
+  the research described in this paper~\cite{tsb_git}.
+The TSB suite is freely available on Github under the Boost Software License,
+  version 1.0.
+Revision \fxnote{WHATEVER} contains the source code used for the experiments in
+  this paper.
+The benchmark suite has three major components: a multi-dimensional array
+  abstraction, generic solver components and a test harness.
 
 \subsection{Test Problem}
 \label{sec:experimental_setup:test_problem}
 
 %{\color{red} REPLACE WITH EXACT MATRIX / STENCIL \\
 The benchmarks in TSB solve the following one-dimensional diffusion equation in
-each vertical column of a 3D Cartesian grid using the implicit Backward Time,
-Centered Space (BTCS) finite difference method:
-
+  each vertical column of a 3D Cartesian grid using the implicit Backward Time,
+  Centered Space (BTCS) finite difference method:
 \begin{align*}
 u_t &= Du_{kk}, \: k \: \text{in} \: (0, 1) \\
                                           \\
 u(k, 0) &= sin(N * \pi * k)               \\
 u(0, t) &= u(1, t) = 0
 \end{align*}
-
-\noindent where \(D\) is the diffusion coefficient and \(N\) is the frequency of the sine
-wave in the initial conditions. This problem has an exact solution:
-
+where \(D\) is the diffusion coefficient and \(N\) is the frequency of the sine
+  wave in the initial conditions.
+This problem has an exact solution:
 \begin{align*}
 u(k, t) = e^{(-D * N^2 * \pi^2 * t)} * sin(N * \pi * k)
 \end{align*}
-
 An identical form of the problem is initialized in every vertical column of the
-3D grid. To verify numerical correctness, we compute the L2 norm and residual
-vector for each vertical column solve.
+  3D grid.
+To verify numerical correctness, we compute the L2 norm and residual vector for
+  each vertical column solve.
 %}
 
 %{\color{red} THIS SHOULD BE MOVED UP INTO TILING /INTRO SECTION \\
@@ -1132,99 +1132,111 @@ vector for each vertical column solve.
 %sufficiently descriptive.
 %%}
 
-\subsection{Hardware and Software Utilized}
-\label{sec:experimental_setup:hardware_and_software_utilized}
+\subsection{Hardware Platforms}
+\label{sec:experimental_setup:hardware_platforms}
 
 %{\color{red} MOVE TO APPENDIX/README \\
-\fxnote{Cleanup PUs/cores}
+%\begin{table*}[t]
+%\centering
+%\caption{\textbf{Test Platforms:}}
+%\begin{tabular}{|c|c|c|c|} \hline
+%\textbf{System Name}     & \textbf{Edison}          & \textbf{Cori}            & \textbf{Carl}             \\ \hline
+%Model                    & Intel Xeon E5-2695 v2    & Intel Xeon E5-2698 v3    & Intel Xeon Phi 7210       \\ \hline
+%Microarchitecture        & Ivy Bridge               & Haswell                  & Knight's Landing          \\ \hline
+%Vector Instruction Set   & AVX                      & AVX2                     & AVX512                    \\ \hline
+%CPU Clock Frequency      & 2.4 GHz (3.2 GHz Turbo)  & 2.3 GHz (3.6 GHz Turbo)  & 1.3 GHz (1.5 GHz Turbo)   \\ \hline
+%Processing Units (Cores) & 12                       & 16                       & 64                        \\ \hline
+%Hardware Threading       & 2-way                    & 2-way                    & 4-way                     \\ \hline
+%L1D Cache                & 32KB 8-way               & 32KB 8-way               & 32KB 8-way                \\
+%                         & (local to each PU)     & (local to each PU)     & (local to each PU)      \\ \hline
+%L2 Cache                 & 256KB 8-way              & 256KB 8-way              & 1024KB 16-way; 512KB/PU \\
+%                         & (local to each PU)     & (local to each PU)     & (shared by 2 PUs)       \\ \hline
+%L3 Cache                 & \fxnote{hwloc}           & \fxnote{hwloc}           & \fxnote{hwloc}            \\ \hline
+%TLB                      & \fxnote{TODO}            & \fxnote{TODO}            & \fxnote{TODO}             \\ \hline
+%DDR4 SDRAM               & \fxnote{TODO}            & \fxnote{TODO}            & \fxnote{TODO}             \\ \hline
+%\end{tabular}
+%\label{tab:test_platforms}
+%\end{table*}
 
-\begin{table*}[t]
-\centering
-\caption{\textbf{Test Platforms:}}
-\begin{tabular}{|c|c|c|c|} \hline
-\textbf{System Name}     & \textbf{Edison}          & \textbf{Cori}            & \textbf{Carl}             \\ \hline
-Model                    & Intel Xeon E5-2695 v2    & Intel Xeon E5-2698 v3    & Intel Xeon Phi 7210       \\ \hline
-Microarchitecture        & Ivy Bridge               & Haswell                  & Knight's Landing          \\ \hline
-Vector Instruction Set   & AVX                      & AVX2                     & AVX512                    \\ \hline
-CPU Clock Frequency      & 2.4 GHz (3.2 GHz Turbo)  & 2.3 GHz (3.6 GHz Turbo)  & 1.3 GHz (1.5 GHz Turbo)   \\ \hline
-Processing Units (Cores) & 12                       & 16                       & 64                        \\ \hline
-Hardware Threading       & 2-way                    & 2-way                    & 4-way                     \\ \hline
-L1D Cache                & 32KB 8-way               & 32KB 8-way               & 32KB 8-way                \\
-                         & (local to each PU)     & (local to each PU)     & (local to each PU)      \\ \hline
-L2 Cache                 & 256KB 8-way              & 256KB 8-way              & 1024KB 16-way; 512KB/PU \\
-                         & (local to each PU)     & (local to each PU)     & (shared by 2 PUs)       \\ \hline
-L3 Cache                 & \fxnote{hwloc}           & \fxnote{hwloc}           & \fxnote{hwloc}            \\ \hline
-TLB                      & \fxnote{TODO}            & \fxnote{TODO}            & \fxnote{TODO}             \\ \hline
-DDR4 SDRAM               & \fxnote{TODO}            & \fxnote{TODO}            & \fxnote{TODO}             \\ \hline
-\end{tabular}
-\label{tab:test_platforms}
-\end{table*}
+The TSB suite currently targets x86-64 microarchitectures with SIMD vector units
+  running POSIX-compliant operating systems.
+The results presented in this paper were collected from both Intel Xeon and
+  Xeon Phi systems.
 
-TSB currently targets x86-64 microarchitectures with support for the AVX vector
-extensions running POSIX-compliant operating systems. The systems listed in
-Table \ref{tab:x8664_test_platforms} were used to produce the results presented in
-this paper.
+Our two Intel Xeon platforms, Edison~\cite{edison_configuration} and Cori Phase
+  1~\cite{cori_phase_1_configuration}, are homogeneous Cray supercomputers,
+  consisting of traditional dual-socket x86-64 processors.
+Edison features Intel Xeon E5-2695 v2 Ivy Bridge (IVB)~\cite{intel_ark_xeon_e5_2695_v2}
+  processors, and Cori Phase 1 has Intel Xeon E5-2698
+  v3 Haswell (HSW)~\cite{intel_ark_xeon_e5_2698_v3} processors.
+The Haswell microarchitecture offers a number of important improvements over
+  Ivy Bridge relevant to the solver described in this paper, such as AVX2
+  fused-multiply-add instructions, increased DDR4 memory bandwidth, increased
+  cache bandwidth and other cache performance improvements~\cite{intel_opt_manual}.
+However, in general, the two Xeon platforms have a very similar performance
+  profile for our application.
 
-Our two Intel Xeon platforms, Edison and Cori, are homogeneous Cray
-supercomputers, consisting of traditional dual-socket x86-64 processors. Edison
-features Ivy Bridge processors, and Cori has Haswell processors. Haswell offers
-a number of important improvements over Ivy Bridge relevant to the solver described
-in this paper, such as increased DDR4 memory bandwidth, increased cache bandwidth
-and other cache performance improvements. On the whole, the two platforms have
-a very similar performance profile for our application.
+Our Xeon Phi testbed, an Intel Xeon Phi 7210 Knight's Landing (KNL)~\cite{intel_ark_xeon_phi_7210}
+  is notably different from the two Xeon systems.
+It is a many-core design with a 2D mesh of \emph{light} cores optimized
+  for throughput and explicit parallelism at the expense of increased latency
+  and reduced complexity in other areas (branch prediction, out-of-order
+  execution facilities, pipeline depth, etc).
+The KNL microarchitecture has a number of novel features including on-package
+  high-bandwidth MCDRAM (which can be used as programmable memory or a direct-mapped
+  last-level cache), 4 hyper-threads per core and dual 512-bit AVX512 vector units.~\cite{roofline_knl,sodani_slidedeck}
 
-Our Knight's Landing (KNL) platform is notably different from the two Xeon systems.
-There are primarily four broad characteristics distinguishing the Knight's
-Landing from our traditional CPU platforms:
-
-\begin{itemize}
-\item \textbf{AVX512:} Knight's Landing has more vector units than our other
-platforms, and the vector width has been increased from 256 bits to 512 bits.
-AVX512 introduces new mask registers, and most vector operations support
-masking. Additionally, AVX512 has conflict detection instructions. 
-\item \textbf{Manycore Design:} Knight's Landing has twice as many
-cores and eight times as many hardware-threads per socket as our
-other platforms. Knight's Landing cores are \emph{light} cores based the Silvermont,
-an Intel Atom design, while our other platforms feature \emph{heavy} cores based on
-the Intel Core design.
-\item \textbf{Intra-Socket NUMA Effects:} Knight's Landing adds two new layers
-to the traditional hardware-thread \(\subset\) core \(\subset\) socket
-topology. A Knight's Landing socket contains four quadrants (each containing a
-fourth of the cores and DDR4 memory), and can be configured to expose each of
-these quadrants as a distinct NUMA domain. Additionally, each quadrant can be
-further subdivided into 2-core tiles.
-\item \textbf{High Bandwidth Memory and Different Cache Design:}
-Perhaps the most notable feature of the Knight's Landing microarchitecture is the
-on-package high-bandwidth MCDRAM (16GBs on our platform, with a pin bandwidth
-of NUMBER GB/s). While Knight's Landing has no traditional L3 cache, the MCDRAM
-can be configured as a hardware managed last level cache. Alternatively, the MCDRAM
-can be configured for explicit allocation and management by user code. The L2 
-design on Knight's Landing is also a departure from contemporary Xeon platforms.
-The two cores in a tile share a 16-way associative, inclusive 1MB L2 cache.
-Contemporary Xeons typically have an 8-way associative L2 cache which is local
-to each core and non-inclusive/non-exclusive with the L1D cache. Knight's
-Landing has 512KB of L2 capacity per core, while our other platforms have only
-256KB of L2 capacity per core (note that all platforms have 128KB L2 capacity
-per \emph{hardware-thread}). The L1D caches on Knight's Landing are similar to
-contemporaries.
-\end{itemize}
-
-The Knight's Landing processors can be configured for different NUMA topologies
-and MCDRAM uses. Each quadrant can exposed as a separate NUMA domain, two NUMA
-domains can be exposed (each containing one quadrant) or a single NUMA domain
-can be exposed (containing all cores). As mentioned above, the MCDRAM can either
-be configured to act as a last level cache, or it can be made available as
-programmable memory.
-
-For our experiments, we primarily ran in the \lstinline{quadcache} mode, which
-exposes a single NUMA locality and uses the MCDRAM as a last level cache. This
-mode allows users to run applications on Knight's Landing without any
-modifications to address NUMA effects or utilize MCDRAM. We were interested in
-investigating the performance of this particular mode as we believe it is the
-best effort for adoption of the microarchitecture.
-%}
-
-\fxnote{Mention Hybrid Mode}
+%There are primarily four broad characteristics distinguishing the Knight's
+%Landing from our traditional CPU platforms:
+%
+%\begin{itemize}
+%\item \textbf{AVX512:} Knight's Landing has more vector units than our other
+%platforms, and the vector width has been increased from 256 bits to 512 bits.
+%AVX512 introduces new mask registers, and most vector operations support
+%masking. Additionally, AVX512 has conflict detection instructions. 
+%\item \textbf{Manycore Design:} Knight's Landing has twice as many
+%cores and eight times as many hardware-threads per socket as our
+%other platforms. Knight's Landing cores are \emph{light} cores based the Silvermont,
+%an Intel Atom design, while our other platforms feature \emph{heavy} cores based on
+%the Intel Core design.
+%\item \textbf{Intra-Socket NUMA Effects:} Knight's Landing adds two new layers
+%to the traditional hardware-thread \(\subset\) core \(\subset\) socket
+%topology. A Knight's Landing socket contains four quadrants (each containing a
+%fourth of the cores and DDR4 memory), and can be configured to expose each of
+%these quadrants as a distinct NUMA domain. Additionally, each quadrant can be
+%further subdivided into 2-core tiles.
+%\item \textbf{High Bandwidth Memory and Different Cache Design:}
+%Perhaps the most notable feature of the Knight's Landing microarchitecture is the
+%on-package high-bandwidth MCDRAM (16GBs on our platform, with a pin bandwidth
+%of NUMBER GB/s). While Knight's Landing has no traditional L3 cache, the MCDRAM
+%can be configured as a hardware managed last level cache. Alternatively, the MCDRAM
+%can be configured for explicit allocation and management by user code. The L2 
+%design on Knight's Landing is also a departure from contemporary Xeon platforms.
+%The two cores in a tile share a 16-way associative, inclusive 1MB L2 cache.
+%Contemporary Xeons typically have an 8-way associative L2 cache which is local
+%to each core and non-inclusive/non-exclusive with the L1D cache. Knight's
+%Landing has 512KB of L2 capacity per core, while our other platforms have only
+%256KB of L2 capacity per core (note that all platforms have 128KB L2 capacity
+%per \emph{hardware-thread}). The L1D caches on Knight's Landing are similar to
+%contemporaries.
+%\end{itemize}
+%
+%The Knight's Landing processors can be configured for different NUMA topologies
+%and MCDRAM uses. Each quadrant can exposed as a separate NUMA domain, two NUMA
+%domains can be exposed (each containing one quadrant) or a single NUMA domain
+%can be exposed (containing all cores). As mentioned above, the MCDRAM can either
+%be configured to act as a last level cache, or it can be made available as
+%programmable memory.
+%
+%For our experiments, we primarily ran in the \lstinline{quadcache} mode, which
+%exposes a single NUMA locality and uses the MCDRAM as a last level cache. This
+%mode allows users to run applications on Knight's Landing without any
+%modifications to address NUMA effects or utilize MCDRAM. We were interested in
+%investigating the performance of this particular mode as we believe it is the
+%best effort for adoption of the microarchitecture.
+%%}
+%
+%\fxnote{Mention Hybrid Mode}
 
 \subsection{Parallelization and Affinity}
 \label{sec:experimental_setup:parallelization_and_affinity}
