@@ -1238,45 +1238,45 @@ The KNL microarchitecture has a number of novel features including on-package
 %
 %\fxnote{Mention Hybrid Mode}
 
-\subsection{Parallelization and Affinity}
-\label{sec:experimental_setup:parallelization_and_affinity}
-
-%{\color{red} CUT TO 1pp/MOVE TO README \\
-The TSB variants used in the work described in this paper are parallelized
-using simple OpenMP pragmas. The problem is embarrassingly parallel; there is
-no dependency or data exchange whatsoever between different columns during the
-vertical solve. As such, we largely do not discuss scalability as a function of
-the number of processing units in this paper; we are instead interested in
-comparing performance against the manufacturer-specified pin bandwidth. Note,
-however, that as the Thomas algorithm has a low algorithmic intensity and is
-memory bandwidth bound, linear scaling should not be expected; memory-bandwidth
-bound codes typically experience non-linear effects, achieving super-linear
-performance at lower degrees of parallelism (exploiting shared caches, etc) and
-leveling off once the memory controller has saturated.
-
-The results presented in this paper show results on both 1 processing unit and
-1 socket. On our Ivy Bridge and Haswell platforms, we had 2 sockets available
-per node, however, we chose to limit ourselves to studying performance on a
-single socket to avoid needing to invest effort into optimizing for
-inter-socket NUMA effects. We did not believe that such efforts would be
-beneficial to the production applications we are working with. Our strategy for
-running on on multi-socket nodes in our production climate application is to
-run one or more threaded processes per NUMA domain and never run a process
-which spans two inter-socket NUMA domains (on Knight's Landing, there are
-intra-socket NUMA effects, but they do not have the same magnitude of impact on
-application performance and thus it might be feasible to run processes across
-multiple intra-socket NUMA domains on that platform). 
-
-It was important to ensure that threads were correctly pinned to processing
-units in all our experiments. For the experiments presented in this paper, we
-utilized one OS-thread per processing unit. In this threading regime, we wanted
-to pin OS-threads to hardware-threads to eliminate the possibility of systemic
-experimental uncertainty caused by the kernel context switching our OS-threads
-between different hardware-threads on a processing unit. E.g. we wanted to bind
-each OS-thread to a particular hardware-thread on a core, instead of binding
-each OS-thread to an entire core. We used hwloc~\cite{}, an affinity and
-topology framework, to achieve the desire thread pinning.
-%}
+%\subsection{Parallelization and Affinity}
+%\label{sec:experimental_setup:parallelization_and_affinity}
+%
+%%{\color{red} CUT TO 1pp/MOVE TO README \\
+%The TSB variants used in the work described in this paper are parallelized
+%using simple OpenMP pragmas. The problem is embarrassingly parallel; there is
+%no dependency or data exchange whatsoever between different columns during the
+%vertical solve. As such, we largely do not discuss scalability as a function of
+%the number of processing units in this paper; we are instead interested in
+%comparing performance against the manufacturer-specified pin bandwidth. Note,
+%however, that as the Thomas algorithm has a low algorithmic intensity and is
+%memory bandwidth bound, linear scaling should not be expected; memory-bandwidth
+%bound codes typically experience non-linear effects, achieving super-linear
+%performance at lower degrees of parallelism (exploiting shared caches, etc) and
+%leveling off once the memory controller has saturated.
+%
+%The results presented in this paper show results on both 1 processing unit and
+%1 socket. On our Ivy Bridge and Haswell platforms, we had 2 sockets available
+%per node, however, we chose to limit ourselves to studying performance on a
+%single socket to avoid needing to invest effort into optimizing for
+%inter-socket NUMA effects. We did not believe that such efforts would be
+%beneficial to the production applications we are working with. Our strategy for
+%running on on multi-socket nodes in our production climate application is to
+%run one or more threaded processes per NUMA domain and never run a process
+%which spans two inter-socket NUMA domains (on Knight's Landing, there are
+%intra-socket NUMA effects, but they do not have the same magnitude of impact on
+%application performance and thus it might be feasible to run processes across
+%multiple intra-socket NUMA domains on that platform). 
+%
+%It was important to ensure that threads were correctly pinned to processing
+%units in all our experiments. For the experiments presented in this paper, we
+%utilized one OS-thread per processing unit. In this threading regime, we wanted
+%to pin OS-threads to hardware-threads to eliminate the possibility of systemic
+%experimental uncertainty caused by the kernel context switching our OS-threads
+%between different hardware-threads on a processing unit. E.g. we wanted to bind
+%each OS-thread to a particular hardware-thread on a core, instead of binding
+%each OS-thread to an entire core. We used hwloc~\cite{}, an affinity and
+%topology framework, to achieve the desire thread pinning.
+%%}
 
 \subsection{Toolchain}
 \label{sec:experimental_setup:toolchain}
