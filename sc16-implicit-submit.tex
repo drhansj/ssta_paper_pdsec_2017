@@ -218,12 +218,12 @@ This prevents amortizing setup and factorization costs
   and also challenges vectorization due to the odd size and
   dissimilar entries of the matrices, as well as the 
   memory access patterns relative to the bigger simulation data layout.
-In that case, it is usually sub-optimal on many-core Single-Instruction, Multiple-Data (SIMD)
-  or Single-Instruction, Multiple-Thread (SIMT) GPU architectures
-  to simply call an optimized linear algebra library, 
+In that case, it is usually sub-optimal on SIMD many-core or SIMT GPGPU
+  architectures to simply call an optimized linear algebra library, 
   such as Intel's Math Kernel Library (MKL)~\cite{mkl_website} or NVIDIA's
-  CUDA Basic Linear Algebra Subroutines (cuBLAS)~\cite{cublas_website}; these may not achieve peak memory bandwidth 
-  and floating-point performance across the range of small matrix size. 
+  CUDA Basic Linear Algebra Subroutines (cuBLAS)~\cite{cublas_website}; these
+  may not achieve peak memory bandwidth and floating-point performance across 
+  the range of small matrix size. 
 In that sense, it can leads applications to create their own 
   custom implementations, which may not be optimal, and create a 
   (potentially unnecessary) maintenance burden for the applications 
@@ -278,10 +278,12 @@ Overall, there is a gap in approaches that have both effective vectorization,
 \section{Implementation}
 \label{sec:implementation}
 
-%Suppose we have a symmetric positive-definite or diagonally-dominant \(nk \times nk\)
-Suppose we have an \(nk \times nk\) tridiagonal matrix $A$ and two $nk$-element
-vectors $u^{s}$ and $u^{s+1}$.  We wish to solve $Au^{s+1} = u^{s}$ for
-$u^{s}$:
+Suppose we have an \(nk \times nk\) tridiagonal matrix \(A\) and two \(nk\) element
+  vectors \(u^{s}\) and \(u^{s+1}\).  We wish to solve \(Au^{s+1} = u^{s}\) for
+  \(u^{s}\):
+\fxnote[footnote,noinline]{Bryce: I'd like to say symmetric positive-definite
+  or diagonally-dominant here to make it clear that our solver only works with
+  certain classes of tridiagonal matrices.}
 
 \[
 \begin{bmatrix}
@@ -309,32 +311,31 @@ u^{s}_{n-1}
 \]
 
 Our matrix \(A\) is stored as a set of three vectors: an \(nk-1\) element
-sub-diagonal vector \(a\), an \(nk\) element diagonal vector \(b\) and an
-\(nk-1\) element super-diagonal vector \(c\). In practical applications, a
-different matrix \(A\) exists for each \((i,j)\) location, because the diagonals
-may depend on the previous solution \(u^{s}\) (in a non-linear iteration loop,
-for example).
+  sub-diagonal vector \(a\), an \(nk\) element diagonal vector \(b\) and an
+  \(nk-1\) element super-diagonal vector \(c\).
+In practical applications, a different matrix \(A\) exists for each \((i,j)\)
+  location, because the diagonals may depend on the previous solution \(u^{s}\)
+  (in a non-linear iteration loop, for example).
 
 \fxnote{Paragraph overview of SSTA solver}
 
 \subsection{The Thomas Algorithm}
 \label{sec:implementation:thomas_algorithm}
 
-For a \emph{diagonally-dominant} tridiagonal matrix,
-  we can use a simplified form of Gaussian elimination 
-  that does not require pivoting, known as the Thomas algorithm or the
-  tridiagonal matrix algorithm (TDMA)~\cite{ConteEtAlElementaryNumericalAnalysis,QuarteroniEtAl2007,TDMA}. 
+For a \emph{diagonally-dominant} tridiagonal matrix, we can use a simplified
+  form of Gaussian elimination that does not require pivoting, known as the
+  Thomas algorithm or the tridiagonal matrix algorithm
+  (TDMA)~\cite{ConteEtAlElementaryNumericalAnalysis,QuarteroniEtAl2007,TDMA}. 
 This takes advantage of sparsity to be \(O(nk)\) in time, 
   and can be extended to banded matrices and LU factorizations.
 It is also a significant improvement over dense Gaussian elimination,
   which is \(O(nk^3)\) in time. 
 We use a formulation of the Thomas algorithm which does not require any storage
-for temporary values but overwrites the \(b\) vector and solves for \(u^{s+1}\)
-in-place, overwriting \(u^{s}\).
+  for temporary values but overwrites the \(b\) vector and solves for \(u^{s+1}\)
+  in-place, overwriting \(u^{s}\).
 
 The Thomas algorithm consists of two passes.  First, a forward pass is
-performed to eliminate the \(a_i\) elements:
-
+  performed to eliminate the \(a_i\) elements:
 \begin{lstlisting}
 for (auto k = 1; k < nk; ++k) {
   auto const m = a[k] / b[k - 1];
@@ -342,10 +343,8 @@ for (auto k = 1; k < nk; ++k) {
   u[k] = u[k] - m * u[k - 1];
 } 
 \end{lstlisting}
-
 Then, an abbreviated form of backwards substitution is performed to obtain the
-solution:
-
+  solution:
 \begin{lstlisting}
 u[nk - 1] = u[nk - 1] / b[nk - 1];
 
@@ -355,39 +354,45 @@ for (auto k = nk - 2 ; k >= 0; --k) {
 \end{lstlisting}
 
 The Thomas algorithm is a very low algorithmic intensity (AI)~\cite{roofline}
-algorithm. During the course of our work, we developed a theoretical peak
-performance model for the Thomas algorithm. First, we count the number of FLOPs
-performed. We will consider multiplications, additions and division operations
-as FLOPs.
+  algorithm.
+During the course of our work, we developed a theoretical peak performance
+  model for the Thomas algorithm.
+First, we count the number of FLOPs performed.
+We will consider multiplications, additions and division operations as FLOPs.
 
 Each iteration of the forward elimination loop contains 1 division, 2
-multiplications and 2 subtractions. This gives us a total of either \(3(nk-1)\)
-FLOPs on fused-multiply-add (FMA) architectures~\cite{} or \(5(nk-1)\) FLOPs on
-non-FMA architectures. Next, the pre-substitution operation (the assignment to
-\lstinline{u[nk - 1]} in the above snipper) performs a single division.
+  multiplications and 2 subtractions.
+This gives us a total of either \(3(nk-1)\) FLOPs on fused-multiply-add (FMA)
+  architectures~\cite{} or \(5(nk-1)\) FLOPs on non-FMA architectures.
+Next, the pre-substitution operation (the assignment to \lstinline{u[nk - 1]}
+  in the above snipper) performs a single division.
 Finally, the backwards substitution loop, performs 1 multiplication, 1
-subtraction and 1 division, adding either \(2(nk-1)\) FLOPs (FMA architectures)
-or \(3(nk-1\) FLOPs (non-FMA architectures). In total, this gives us either
-\(5nk-4\) FLOPs (FMA) or \(8nk-7\) FLOPs (non-FMA) for the entire Thomas
-algorithm.
+  subtraction and 1 division, adding either \(2(nk-1)\) FLOPs (FMA architectures)
+  or \(3(nk-1\) FLOPs (non-FMA architectures).
+In total, this gives us either \(5nk-4\) FLOPs (FMA) or \(8nk-7\) FLOPs
+  (non-FMA) for the entire Thomas algorithm.
 
 Our data movement model for the Thomas algorithm assumes that we will achieve
-optimal performance when data is cached between the forward elimination and
-back substitution loop. That is, we assume that accesses to \(a\), \(b\), \(c\)
-and \(u\) will \emph{not} go to main memory in the back substitution loop
-because the arrays still remain in cache from the forward elimination loop accesses.
+  optimal performance when data is cached between the forward elimination and
+  back substitution loop.
+That is, we assume that accesses to \(a\), \(b\), \(c\) and \(u\) will
+  \emph{not} go to main memory in the back substitution loop because the arrays
+  still remain in cache from the forward elimination loop accesses.
 
 The Thomas algorithm accesses four arrays, reading from all of them (\(a\),
-\(b\), \(c\) and \(u\)) and writing to two of them (\(b\), \(u\)). \(b\) and \(u\)
-have extent \(nk\), so we write \(2nk\) elements. \(a\) and \(c\) have extent
-\(nk-1\), so we read \(2(nk-1)+2(nk)\) elements. In total, \(6nk-2\) elements are
-moved. Assuming double precision, \(48nk-16\) bytes are moved from main memory
-during execution of the Thomas algorithm.
+  \(b\), \(c\) and \(u\)) and writing to two of them (\(b\), \(u\)).
+\(b\) and \(u\) have extent \(nk\), so we write \(2nk\) elements.
+\(a\) and \(c\) have extent \(nk-1\), so we read \(2(nk-1)+2(nk)\) elements.
+In total, \(6nk-2\) elements are moved.
+Assuming double precision, \(48nk-16\) bytes are moved from main memory
+  during execution of the Thomas algorithm.
 
 This gives us a FLOPs/byte ratio of \((5nk-4)/(48nk-16)\) (FMA) or
-\((8nk-7)/(48nk-16)\) (non-FMA). The lower bound for the Thomas algorithm's AI
-is \(1/32\) FLOPs/byte when \(nk=1\).  The upper bound is \(5/48\) FLOPS/byte
-(FMA) or \(1/6\) FLOPs/byte (non-FMA) as \(nk\) approaches infinity.
+  \((8nk-7)/(48nk-16)\) (non-FMA).
+The lower bound for the Thomas algorithm's arithmetic intensity is \(1/32\)
+  FLOPs/byte when \(nk=1\). 
+The upper bound is \(5/48\) FLOPS/byte (FMA) or \(1/6\) FLOPs/byte (non-FMA) as
+  \(nk\) approaches infinity.
 
 %In each iteration of the forward elimination loop, we perform 1 division, 2
 %multiplications and 2 subtractions. The multiplications and subtractions will
@@ -560,35 +565,41 @@ is \(1/32\) FLOPs/byte when \(nk=1\).  The upper bound is \(5/48\) FLOPS/byte
     \includegraphics[width=0.95\columnwidth]{figures/tds_vector.pdf}
 \end{figure}
 
-In the applications described in \S\ref{sec:introduction} we need to apply the Thomas
-algorithm to each vertical column in a \(ni \times nj \times nk\) Cartesian grid,
-where \(i\) and \(j\) are horizontal dimensions and \(k\) is the vertical
-index. These computations are known as the \emph{vertical solves}. The matrix
-coefficients for each column depend on the problem state, so a unique matrix
-for each column needs to be constructed before each solve. There are two
-different approaches to computing these batch solves.
+In the applications described in \S\ref{sec:introduction} we need to apply the
+  Thomas algorithm to each vertical column in a \(ni \times nj \times nk\)
+  Cartesian grid, where \(i\) and \(j\) are horizontal dimensions and \(k\) is
+  the vertical index.
+These computations are known as the \emph{vertical solves}.
+The matrix coefficients for each column depend on the problem state, so a
+  unique matrix for each column needs to be constructed before each solve.
+There are two different approaches to computing these batch solves.
 
 The most straightforward approach is \emph{solve} each column
-\emph{independently} (the \emph{independent solve strategy}; Figure
-\ref{fig:independent_solve_strategy}). An \(nk \times nk\) tridiagonal matrix
-is constructed for each column, and then the Thomas algorithm is used to solve
-the system formed by the matrix and the vertical column. Because the vertical
-solves are independent, they can be executed concurrently via task-level
-parallelism. Vectorization of the \(nk\) loop is not possible as each iteration
-of the loops in the Thomas algorithm is dependent on the previous iteration
-(e.g. loop-carried dependency). Although the LAPACK interface contains no
-routine for Thomas algorithm, \lstinline{dgtsv()} and \lstinline{dgttrs()}
-(which solve tridiagonal and banded systems, respectively) use this approach.
+  \emph{independently} (the \emph{independent solve strategy}; Figure
+  \ref{fig:implementation:independent_solve_strategy}).
+An \(nk \times nk\) tridiagonal matrix is constructed for each column, and then
+  the Thomas algorithm is used to solve the system formed by the matrix and the
+  vertical column.
+Because the vertical solves are independent, they can be executed concurrently
+  via task-level parallelism.
+Vectorization of the \(nk\) loop is not possible as each iteration of the loops
+  in the Thomas algorithm is dependent on the previous iteration (e.g.
+  loop-carried dependency).
+Although the LAPACK interface contains no routine for Thomas algorithm,
+  \lstinline{dgtsv()} and \lstinline{dgttrs()} (which solve tridiagonal and
+  banded systems, respectively) use this approach.
 
 The other approach is to \emph{simultaneously solve} multiple columns (the
-\emph{simultaneous solve strategy}; Figure
-\ref{fig:simultaneous_solve_strategy}). A block \(nk \times nk\) tridiagonal
-matrix is constructed for the whole grid; each block contained within the
-matrix is an \(ni \times nj\) horizontal plane (e.g. the block matrix is a 4D
-space). To perform the vertical solves, we view the entire 3D Cartesian grid as an \(nk\) block vector of \(ni
-\times nj\) planes and apply it to the block matrix. Each step of the algorithm is
-applied across an entire plane. For example, the forward sweep becomes:
-
+  \emph{simultaneous solve strategy}; Figure
+  \ref{fig:implementation:simultaneous_solve_strategy}).
+A block \(nk \times nk\) tridiagonal matrix is constructed for the whole grid;
+  each block contained within the matrix is an \(ni \times nj\) horizontal plane
+  (e.g. the block matrix is a 4D space).
+To perform the vertical solves, we view the entire 3D Cartesian grid as an
+  \(nk\) block vector of \(ni \times nj\) planes and apply it to the block
+  matrix.
+Each step of the algorithm is applied across an entire plane.
+For example, the forward sweep becomes:
 \begin{lstlisting}
 for (auto j = 0; j < nj; ++j)
   for (auto i = 0; i < ni; ++i) 
@@ -602,14 +613,14 @@ for (auto k = 1; k < nk; ++k)
       u[i][j][k] = u[i][j][k] - m * u[i][j][k - 1];
     } 
 \end{lstlisting}
-
-This approach facilities both task-level parallelism and vectorization. The
-grid and block matrix can be tiled into smaller subgrids, and the Thomas
-algorithm can be applied to each subgrid independently. Each step of the Thomas
-algorithm can be vectorized across the \(ni \times nj\) horizontal plane that
-it is operating on: e.g. the \(i\) or \(j\) loops in the above snippet can be
-vectorized. For the SSTA solver, the horizontal dimension \(i\) is always the
-unit stride dimension, and the direction in which we vectorize.
+This approach facilities both task-level parallelism and vectorization.
+The grid and block matrix can be tiled into smaller subgrids, and the Thomas
+  algorithm can be applied to each subgrid independently.
+Each step of the Thomas algorithm can be vectorized across the \(ni \times nj\)
+  horizontal plane that it is operating on: e.g. the \(i\) or \(j\) loops in the
+  above snippet can be vectorized.
+For the SSTA solver, the horizontal dimension \(i\) is always the unit stride
+  dimension, and the direction in which we vectorize.
 
 %\fxnote{TODO: Explain that the independent solve approach is what LAPACK does,
 %and that's why it is insufficient for this type of problem. Also, explain that
@@ -619,28 +630,29 @@ unit stride dimension, and the direction in which we vectorize.
 
 %{\color{red} CUT REDUNDANT WITH INTRO \\
 The vector parallelism exposed by the simultaneous approach offers a major
-benefit over the independent approach, since it is not possible to vectorize
-most of the kernels in the independent approach due to data dependencies
-between iterations of the Thomas algorithm. Even if it was possible to
-vectorize in the vertical \(nk\) dimension, it would still be undesirable to do
-so. The extent of the vertical dimension tends to be very small in the
-applications we are concerned with \(O(30-100)\). Vectorizing in the
-horizontal dimensions allows us to control locality and loop trip counts via
-tiling.
+  benefit over the independent approach, since it is not possible to vectorize
+  most of the kernels in the independent approach due to data dependencies
+  between iterations of the Thomas algorithm.
+Even if it was possible to vectorize in the vertical \(nk\) dimension, it would
+  still be undesirable to do so.
+The extent of the vertical dimension tends to be very small in the applications
+  we are concerned with \(O(30-100)\).
+Vectorizing in the horizontal dimensions allows us to control locality and loop
+  trip counts via tiling.
 %}
 
 \subsection{Data Layout}
 \label{sec:implementation:data_layout}
 
 The data layout of the Cartesian grid has a huge impact on the performance
-potential of the vertical solves. Throughout the course of our research, our
-understanding of the impact of different data layouts has evolved
-substantially. We have investigated three different schemes:
-
-% kji AKA column-major, Fortran, left
-% ijk AKA row-major, C++, right
-\begin{table}[h]%[t]
+  potential of the vertical solves.
+Throughout the course of our research, our understanding of the impact of
+  different data layouts has evolved substantially.
+We have investigated three different schemes:
+\begin{table}[h]
 \centering
+% NOTE: kji AKA column-major, Fortran, left
+% NOTE: ijk AKA row-major, C++, right
 %\caption{\textbf{Data Layouts for the 3D Cartesian Grid:} The following three
 %data layouts were investigated in the course of this research. The \(kji\)-layout
 %is optimal for the independent solve strategy. The \(ijk\)-layout is effective
@@ -655,24 +667,25 @@ substantially. We have investigated three different schemes:
 \(kji\), Row-Major    & \(nj * nk\)       & \(nk\)            & \(1\)               \\ \hline
 \(ikj\)               & \(1\)             & \(ni * nz\)       & \(ni\)              \\ \hline
 \end{tabular}
-\label{tab:layouts}
+\label{tab:implementation:data_layout:layouts}
 \end{table}
 
 The production code that our MKL baseline solver is derived from uses the
-\(ijk\)-layout. The vertical columns that we need to pass in to MKL as the
-solution vector (\(u\)) are non-contiguous, as the vertical dimension \(k\) is
-the dimension with greatest stride. Currently, the production codebase
-allocates a temporary gather buffer, copies data from the grid into the buffer,
-calls the LAPACK solver, and then copies the result from the buffer back to the
-grid.
+  \(ijk\)-layout.
+The vertical columns that we need to pass in to MKL as the solution vector
+  (\(u\)) are non-contiguous, as the vertical dimension \(k\) is the dimension
+  with greatest stride.
+Currently, the production codebase allocates a temporary gather buffer, copies
+  data from the grid into the buffer, calls the LAPACK solver, and then copies
+  the result from the buffer back to the grid.
 
 %{\color{red} CUT-MERGE LEARNINGS IN NEXT \S~\ref{sec:tiling} \\
 We have found the \(kji\)-layout to be optimal for our MKL baseline solver.
 With the \(kji\)-layout, we have contiguous vertical columns which can be
-passed to MKL without temporary allocations or unnecessary copies. We observed
-a noticeable performance increase from this change with very little source code
-impact, although we have not studied the impact of this layout change on
-horizontal solver components.
+  passed to MKL without temporary allocations or unnecessary copies.
+We observed a noticeable performance increase from this change with very
+  little source code impact, although we have not studied the impact of this
+  layout change on horizontal solver components.
 
 %Eventually, we determined that LAPACK would not be sufficient for the vertical
 %solves and that we could achieve substantially higher bandwidths by developing
@@ -683,14 +696,14 @@ horizontal solver components.
 %is the unit stride dimension and the vertical dimension (\(k\)) has the greatest
 %stride.
 
-Our SSTA solver uses either the \(ijk\)- or \(ikj\)-layout. The SSTA algorithm vectorizes in
-one of the horizontal directions (as described in \S\ref{sec:batching_and_parallelism}), so it
-is desirable to use layouts where the horizontal dimension that we are vectorizing (\(i\)) is
-the unit stride dimension, avoiding strided vector loads.
-
+Our SSTA solver uses either the \(ijk\)- or \(ikj\)-layout.
+The SSTA algorithm vectorizes in one of the horizontal directions (as described
+  in \S\ref{sec:implementation:batching_and_parallelism}), so it is desirable to
+  use layouts where the horizontal dimension that we are vectorizing (\(i\)) is
+  the unit stride dimension, avoiding strided vector loads.
 The \(ikj\) layout arose as an optimization to combat data locality and prefetching
-issues on the Intel Xeon Phi Knight's Landing architecture, and is described in greater
-detail in the following section.
+  issues on the Intel Xeon Phi Knight's Landing architecture, and is described in greater
+  detail in the following section.
 %}
 
 \subsection{Tiling}
