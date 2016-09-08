@@ -339,8 +339,8 @@ The Thomas algorithm consists of two passes.  First, a forward pass is
 \begin{lstlisting}
 for (auto k = 1; k < nk; ++k) {
   auto const m = a[k] / b[k - 1];
-  b[k] = b[k] - m * c[k - 1];
-  u[k] = u[k] - m * u[k - 1];
+  b[k] -= m * c[k - 1];
+  u[k] -= m * u[k - 1];
 } 
 \end{lstlisting}
 Then, an abbreviated form of backwards substitution is performed to obtain the
@@ -393,6 +393,8 @@ The lower bound for the Thomas algorithm's arithmetic intensity is \(1/32\)
   FLOPs/byte when \(nk=1\). 
 The upper bound is \(5/48\) FLOPS/byte (FMA) or \(1/6\) FLOPs/byte (non-FMA) as
   \(nk\) approaches infinity.
+Based on this analytic analysis, we can conclude that the Thomas algorithm is
+\emph{memory-bandwidth bound}.
 
 %In each iteration of the forward elimination loop, we perform 1 division, 2
 %multiplications and 2 subtractions. The multiplications and subtractions will
@@ -601,17 +603,14 @@ To perform the vertical solves, we view the entire 3D Cartesian grid as an
 Each step of the algorithm is applied across an entire plane.
 For example, the forward sweep becomes:
 \begin{lstlisting}
-for (auto j = 0; j < nj; ++j)
-  for (auto i = 0; i < ni; ++i) 
-    b[i][j][0] = 1.0 / b[i][j][0];
-
 for (auto k = 1; k < nk; ++k)
-  for (auto j = 0; j < nj; ++j)
-    for (auto i = 0; i < ni; ++i) {
-      auto const m = a[i][j][k] * b[i][j][k - 1];
-      b[i][j][k] = 1.0 / (b[i][j][k] - m * c[i][j][k - 1]);
-      u[i][j][k] = u[i][j][k] - m * u[i][j][k - 1];
-    } 
+for (auto j = 0; j < nj; ++j)
+for (auto i = 0; i < ni; ++i) {
+  auto const m = a[i][j][k]
+               / b[i][j][k - 1];
+  b[i][j][k] -= m * c[i][j][k - 1];
+  u[i][j][k] -= m * u[i][j][k - 1];
+} 
 \end{lstlisting}
 This approach facilities both task-level parallelism and vectorization.
 The grid and block matrix can be tiled into smaller subgrids, and the Thomas
@@ -702,201 +701,113 @@ The SSTA algorithm vectorizes in one of the horizontal directions (as described
   use layouts where the horizontal dimension that we are vectorizing (\(i\)) is
   the unit stride dimension, avoiding strided vector loads.
 The \(ikj\) layout arose as an optimization to combat data locality and prefetching
-  issues on the Intel Xeon Phi Knight's Landing architecture, and is described in greater
-  detail in the following section.
+  issues which hindered performance on the Intel Xeon Phi Knight's Landing
+  architecture, and is described in greater detail in the following section.
 %}
 
 \subsection{Tiling}
 \label{sec:implementation:tiling}
 
 To ensure good CPU cache utilization, it is often necessary to break a larger
-grid into smaller tiles which have greater data locality and can fit into a
-particular level of the cache hierarchy. The Thomas algorithm is no exception.
-In particular, we want all four arrays (\(a\), \(b\), \(c\) and \(u\)) to
-remain in cache in between the forward elimination and the back substitution
-loops. Our analytical performance model is based on this assumption. If any of
-these four arrays need to be reloaded from main memory in between the forward
-elimination and back substitution loops, the amount of main memory data
-movement is significantly increased and the algorithmic intensity of the
-algorithm decreases dramatically. Of course, tiling also provides a useful
-abstraction for parallelization, as each tile can be computed independent of
-other tiles and has no overlapping data accesses.
+  grid into smaller \textbf{tiles} which better amortize nested loop overheads, expose
+  greater data locality and keep data resident in a particular level of the
+  cache hierarchy~\cite{blocked_algorithms}.
+This technique is also known as \textbf{cache blocking}.
+Additionally, partitioning a grid with dimensions known at application
+  initialization into fixed size tiles can provide some of the performance
+  benefits of compile-time-fixed dimensions (e.g. compiler optimizations) with
+  the flexibility of a dynamically sized problem~\cite{kokkos}.
+Tiling also provides a useful abstraction for task parallelization, as
+  each tile can be computed independent of other tiles and has no overlapping
+  data accesses.
+Tiling is particularly important for memory-bandwidth bound computations like
+  tridiagonal matrix solves.
 
-The original production code which we worked with did not do any tiling. Since
-each column was solved by a LAPACK call, completely independent of any other
-columns, the improved data locality exposed by tiling could not be fully
-exploited. In the original \(ijk\) layout production code, a contiguous buffer
-was created to gather the non-contiguous column from the 3D grid, and the
-matrix was built on the fly for each column. Our NAMEFORALGO was designed from
-the ground up to both simultaneously build the matrix and simultaneously solve
-multiple columns. It was evident that we would need to add a tiling abstraction
-to our implementation. While our un-tiled results beat the reference MKL
-results (see Figure \ref{}), they were well below the manufacturer-specified
-bandwidth and profiling made it clear that cache performance was the culprit.
+The production code which our MKL baseline solver is derived from is not task
+  parallelized or explicitly tiled.
+Since each column is solved independently, there is little opportunity to improve
+  locality and reuse via tiling.
+Conceptually, since each column is solved independently in the production code,
+  it is \emph{effectively} tiled, albeit with a very small tile size (a single
+  column, e.g. \(O(nk) \sim O(30-100)\)).
+Our MKL baseline solver is tiled solely to facilitate task parallelization.
 
-Due to the loop-carried dependencies in the Thomas algorithm, we could not tile
-the vertical dimension. Even if we could, this would be undesirable because the
-vertical dimension is typically quite small \fxnote{HOW SMALL}. Thus, our tiling 
-abstraction would need to subdivide the horizontal \(ij\) plane.
+On the other hand tiling is very fundamental to our SSTA solver.
+Our analytical performance model (\S\ref{sec:implementation:thomas_algorithm})
+  is based on caching assumptions which we rely on tiling to enforce.
+In particular, we assume that all four arrays (\(a\), \(b\), \(c\) and \(u\))
+  to remain in cache in between the forward elimination and the back substitution
+  loops.
+If any of these four arrays need to be reloaded from main memory in between the
+  forward elimination and back substitution loops, the amount of main memory data
+  movement is significantly increased and the algorithmic intensity of the
+  algorithm decreases dramatically.
+While our untiled SSTA results outperform the MKL baseline results (Figure
+  \ref{fig:results:efficiency}), they were well below the manufacturer-specified
+  bandwidth and STREAM Triad effective bandwidth.
 
-Our initial implementation used an \(ijk\) layout, where one of the horizontal
-dimensions (\(i\)) is the unit stride dimension, the other horizontal dimension
-(\(j\)) has the next smallest stride and the vertical dimension (\(k\)) has the
-greatest stride.
+Due to the loop-carried dependencies in the Thomas algorithm and the small
+  extent of \(nk\), we could not tile the vertical dimension. So, we explored two
+  tiling schemes which partition the horizontal space.
 
 %{\color{red} CUT MOST OF DISCUSSION, JUST STATE OPTIONS \\
-We decided to only tile in one of the horizontal dimensions (\(j\), the
-non-unit stride horizontal dimension), to minimize the number of non-contiguous
-memory regions in each tile. Consider two different tiling regimes: the "tile
-both" approach subdivides both the \(i\) and \(j\) dimensions by \(x/2\), and
-the "tile \(j\)" approach subdivides only the \(j\) dimension by \(x/4\) (we
-assume here that \(y\) is divisible by \(x/2\) and thus can be neatly tiled in
-this manner). Both approaches create tiles of containing the same number of
-elements, and conceptually will fit into the same space in a data cache
-(\(x/2\)x\(x/2\)x\(z\) tiles for "tile both" and \(x\)x\(x/4\)x\(z\) tiles for
-"tile \(j\)"). However, the "tile \(j\)" approach has much greater data
-contiguity. For the "tile \(j\)" approach, we have \(z\) contiguous
-\(ij\)-planes, each containing \(x\)x\(x/4\) elements.  For the "tile both"
-approach, we have \((x/2)*z\) contiguous \(i\)-lines, each containing \(x/2\)
-elements.
+The \textbf{tile-\(ij\)} scheme partitions both the \(i\) and \(j\) dimensions,
+  yielding tiles with arbitrary horizontal shape. 
+The \textbf{tile-\(j\)} scheme partitions only the \(j\) dimension, producing
+  tiles of containing some of number of complete \(i\) (unit-stride) lines.
+There is a trade-off between these two schemes, with the tile-\(ij\) scheme
+  offering greater flexibility in tile size and the tile-\(j\) scheme offering
+  greater contiguity. 
 
-The greater contiguity of the "tile \(j\)" approach means fewer strided
-accesses and more importantly fewer translation lookaside buffer (TLB) entries
-needed per tile. In the worst case, assuming that each contiguous region of the
-tile can fit within a single TLB entry and that a single entry cannot cover
-multiple contiguous regions, the "tile both" case would take up \((x/2)*z\) TLB
-entries, while the "tile \(j\)" approach would only need \(z\) TLB entries.
+For example, suppose we partition an \(ijk\)-layout grid into four tiles with
+  both the tile-\(ij\) scheme (producing \(ni/2 \times ni/2 \times nk\) tiles)
+  and the tile-\(i\) scheme (producing \(ni \times ni/4 \times nk\) tiles).
+Both tiles have the same size, \(nk \times ni^2/4\) elements.
+However, the tile-\(j\) scheme has much greater data contiguity.
+For the tile-\(ij\) scheme, tiles contain are \(nk \times ni/2\) contiguous
+  \(i\)-lines, each containing \(ni/2\) elements.
+For the tile-\(j\) scheme, tiles contain are \(nk\) contiguous \(ij\)-planes,
+  each containing \(ni^2/4\) elements.
 
-The only notable downside to the "tile \(j\)" approach versus the "tile both"
-approach is the loss of flexibility in tile sizes. The smallest tile size for
-the "tile \(j\)" approach is a \(x\)x\(1\)x\(z\) tile (a line of columns),
-while the smallest tile size for the "tile both" approach is a
-\(1\)x\(1\)x\(z\) tile (a single column). We do not believe this restriction is
-problematic. Because we are vectorizing in the \(i\) direction, it is assumed
-that the \(i\) dimension of a tile will be at least the size of the vector
-width of the target platform. In practice, our vectorizing compiler typically
-unrolls the loops in NAMEFORALGO after vectorization to amortize loop overheads
-and fully utilize the vector register file. Thus, we typically use 2 or 4 times
-the vector width as the minimum \(i\) dimension. 
-%}
+While the tile-\(j\) scheme offers greater contiguity than the
+  tile-\(ij\) in this example, the tile-\(j\) tiles are not a single contiguous
+  memory region.
+The only way to obtain completely contiguous tiles in the \(ijk\)-layout would
+  be to tile the dimension with the greatest stride (\(k\)), which is not possible
+  because we cannot partition the vertical dimension.
 
-We used the \(ijk\) layout and the "tile \(j\)" scheme for much of our initial
-work. Part of our work was to study the effect of tile size on application
-performance.  Tile size controls both the data locality and the parallel grain
-size in our algorithm. Note that given the embarrassingly parallel nature of
-this problem, the effect of tile size on parallelism is well known, and thus
-are mostly outside of our consideration: tile sizes which are too small will
-perform poorly due to high parallel overheads (the "left side" of the
-traditional grain size parabola) and tile sizes which are too large will expose
-insufficient parallelism leading to starvation (the "right side" of the
-traditional grain size parabola)~\cite{some_parallex_thing}.
+This limitation led us to the \(ikj\)-layout for the SSTA solver.
+In this layout, the direction of vectorization (\(i\)) is still the unit stride
+  dimension, avoiding strided loads and assisting hardware prefetching.
+Additionally, the tile-\(j\) tiles are completely contiguous regions of memory,
+  decreasing translation-lookaside buffer pressure, increasing locality for
+  caching and further assisting hardware prefetching.
 
-To determine an optimal tile size, we performed parameter sweeps of the domain
-of tile sizes. We predicted four things:
+Consider switching to the \(ikj\)-layout in the prior example.
+The tile-\(ij\) tiles would contain \(ni/2\) contiguous \(ik\)-planes, each
+  containing \(nk \times ni/2\) elements.
+The tile-\(j\) tiles would be one contiguous region containing
+  \(nk \times ni^2/4\) elements.
 
-\begin{itemize}
-\item Tile sizes small enough to fit into the L1D cache would not be feasible
-because the overheads of loop constructs, parallelization and vectorization
-would be too great relative to the execution time of useful work per
-inner-iteration ("left side" effect). These tile sizes would either require
-smaller vertical dimensions than we use in the production application (\(k <
-16\)) or horizontal dimensions too small to vectorize efficiently (\(i < 16\)).
-\item The optimal tile size would fit into the L2 cache.
-\item There would be a drop in performance for tile sizes which were too large to fit into the L2 cache.
-\item There would be a drop in performance for tile sizes which were too large to fit into the L3 or HBM cache.
-\item Sufficiently large tile sizes would express insufficient parallelism and
-perform poorly due to starvation ("right side" effect).
-\end{itemize}
+%We have observed that the greater contiguity of the tile-\(j\) approach leads
+%  to fewer strided memory accesses, improved hardware prefetching and fewer
+%  translation lookaside buffer (TLB) entries needed per tile (discussed in
+%  \S\ref{results} and shown in Figure \ref{ref:results:tile_size_knl} and
+%  \ref{ref:results:efficiency}).
 
-Our predictions about tile sizes small enough to fit into the L1D cache held,
-as did our predictions about sufficiently large tile sizes. Additionally, as we
-expected, we saw a notable decrease in performance for tile sizes which were
-too large to fit into the L3 cache (see Figure \ref{}), although on
-microarchitectures with a shared L3 cache we did not see this effect in our
-single core results (see Figure \ref{}). Our 
+The only notable downside to the tile-\(j\) scheme is the loss of
+  flexibility in tile sizes.
+The smallest tile size for the tile-\(j\) scheme is a \(ni \times 1 \times nk\)
+  tile (an \(i\)-line of columns), while the smallest tile size for the
+  tile-\(ij\) scheme is a \(1 \times 1 \times z\) tile (a single column).
+We have not found this restriction to be overly problematic.
+If the extent of \(i\) was large enough that the sum of the minimum tile sizes of
+  the arrays \(a\), \(b\), \(c\) and \(u\) was greater than the capacity of the
+  cache that we wished to reside within, we could likely switch to the tile-\(ij\)
+  scheme without experiencing performance degradation due to decreased locality.
 
-%{\color{red} CUT MOST OF EXPERIMENT PATH, JUST STATE BEST OPTIONS, WHY \\
-However we were intrigued to find that, across multiple microarchitectures, the
-tile size which gave the best performance was often a tile size which did
-\emph{not} fit into the L2 cache (see Figure \ref{}). The optimal tile size for
-the \(ijk\) layout version of NAMEFORALGO was usually either equal to or
-slightly larger than the size of the L2 (see Figure \ref{}). Note that if the
-tile size is equal to the size of the cache, we would not consider it to be
-small enough to fit in that cache, as we cannot reasonably expect perfect cache
-utilization or that our four arrays (\(a\), \(b\), \(c\) and \(u\)) will be the
-only data that needs to be stored in the cache. This result was surprising; we
-had expected a notable drop in performance for these tiles sizes because the
-arrays would need to be reloaded from the L3 cache (or the HBM cache in the
-case of the KNL) at the start of each loop in the kernel. 
-
-When profiling the code, we noticed poor TLB performance, and came to the
-realization that this was the cause of the problem. As we discussed earlier, we
-were using the "tile \(j\)" scheme with the \(ijk\) layout version of
-NAMEFORALGO. This scheme offers better data contiguity than the alternate "tile
-both" scheme, however, we still end up with a non-contiguous tile.  The number
-of contiguous regions (and thus TLB entries) were quite large relative to
-hardware capabilities. Even worse, for smaller tile sizes, the size of each
-contiguous region accessed might be less than the smallest page size available
-on the microarchitectures we investigated (4KB in all cases). This would mean
-that for smaller tile sizes, we were not fully utilizing each TLB entry.  Our
-strategy for aligning and padding our arrays to avoid data cache conflicts
-(described in Section \ref{}), while effective, meant that it was almost
-guranteed that no two contiguous regions would reside on the same 4KB or 2MB
-page, amplifying the problem. We have not yet definitely determined whether
-huge pages (1GB) are being used in our benchmark via transparent huge page
-support~\cite{}, and, if not, whether huge pages would be to mitigate this
-effect.
-
-As an example of this issue, \fxnote{EXAMPLE FROM A FIGURE}.
-
-We concluded that as we decreased tile size, this TLB effect increasingly
-became the dominant driving performance factor. A problem size that fit into
-the L3 cache but did not fit into the L2 cache would have better performance
-than a problem size that fit into the L2 cache because the former would make
-better use of TLB entries and exert less pressure on address translation
-hardware.
-
-We soon realized that the problem was that we had decided that the
-vertical dimension \(k\) should have the greatest unit stride (e.g. \(ijk\)
-layout). However, we could not tile in the \(k\) for the same reason that we
-cannot vectorize in the \(k\) dimension; there are loop-carried dependencies in
-the Thomas algorithm. Because we could not tile in \(k\) and \(k\) had the greatest
-stride, there was no way to subdivide our problem into contiguous tiles.
-Consider planar slices of a \(ijk\) layout grid. \(ij\) planes are contiguous
-(but require slicing in \(k\), which we cannot do), \(ik\) planes ("tile \(j\)"
-approach) are non-contiguous and \(jk\) planes are non-contiguous.
-
-Once we realized that the \(ijk\) layout was restricting us to a non-optimal
-tiling scheme, we revisited the question of data layout in NAMEFORALGO.
-Originally, we had one requirement: one of the horizontal dimension should be
-the unit stride dimension so that we can vectorize in that direction. Now, we
-had a second requirement: the vertical dimension should not be have the
-greatest unit stride, because we cannot tile in the vertical dimension.
-Naturally, this led us to the \(ikj\) layout, where the horizontal dimension
-\(i\) is the unit stride dimension, the vertical dimension \(k\) has the next
-smallest stride and the horizontal dimension \(j\) has the greatest unit
-stride. We still use a "tile \(j\)" scheme, however, now our tiles are one
-contiguous region instead of a set of \(z\) planes.
-%}
-
-\fxnote{Interesting decision between ikj iteration vs ijk iteration in the ikj layout. May want to talk about that.}
-
-The change to the \(ikj\) layout produced the desire result. On Sandybridge,
-Ivy Bridge and Haswell, we saw a notable improvement in performance for smaller
-tile sizes (see Figure \ref{}). On these microarchitectures, the best result
-from the \(ikj\) layout variant matched or beat best result of the \(ijk\)
-layout using a smaller tile size which would fit into the L2 cache.
-\fxnote{DESCRIBE RESULTS}. On Knight's Landing, the impact was substantially
-larger (see Figure \ref{}). \fxnote{DESCRIBE RESULTS}. The difference in impact
-between the Intel Xeon architectures and Knight's Landing can be explained by
-the lack of a traditional L3 cache on the Knight's Landing. With the \(ijk\)
-layout on the KNL, the larger tile sizes which did not fit into the L2 cache would
-have to rely on the HBM cache. While the HBM on the KNL provides substantial
-bandwidth, when the HBM is configured to act as a last-level cache it provides
-higher latencies than the typical L3 cache on an Intel Xeon would. We believe
-this difference in cache latency explains the poorer performance relative to
-manufacturer-specified bandwidth of the \(ijk\) layout, and thus explains the
-more significant impact of the \(ikj\) layout on the KNL.
+The SSTA solver supports both the \(ijk\)- and \(ikj\)-layout.
+The tile-\(j\) scheme is used with both layouts.
 
 %\subsection{Aliasing Conflict Mitigation}
 %\label{sec:implementation:cache_aliasing_conflict_mitigation}
@@ -1398,6 +1309,45 @@ Intel VTune Amplifier.
 \section{Results}
 \label{sec:results}
 
+\begin{figure*}[!bth]
+  \captionsetup{width=0.39\textwidth}
+  \centering
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \label{fig:results:tile_size_ivb}
+    \caption{
+      \textbf{SSTA Tile Size vs Effective Bandwidth (Ivy Bridge)}
+    }
+    \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
+  \end{minipage}
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \label{fig:results:tile_size_hsw}
+    \caption{
+      \textbf{SSTA Tile Size vs Effective Bandwidth (Haswell)}
+    }
+    \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
+  \end{minipage}
+\end{figure*}
+
+\begin{figure*}[!bth]
+  \captionsetup{width=0.39\textwidth}
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \label{fig:results:tile_size_knl}
+    \caption{
+      \textbf{SSTA Tile Size vs Effective Bandwidth (Knight's Landing)}
+    }
+    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
+  \end{minipage}
+  \begin{minipage}{0.49\textwidth}
+    \centering
+    \label{fig:results:efficiency}
+    \caption{\textbf{SSTA Efficiency (\% of STREAM Triad Effective Bandwidth)}}
+    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_09_03_2016_09_04_2016_1socket.pdf}
+  \end{minipage}
+\end{figure*}
+
 We present the results of two experiments which characterize the impact of the
 optimizations described in this paper, support the predictions about optimal
 grain size that we made in Section \ref{} and show how the SSTA algorithm
@@ -1503,33 +1453,7 @@ tile width in our discussion of this parameter sweep.
 %    }
 %\end{figure}
 
-\begin{figure}%[!bt]
-    \centering
-    \label{fig:r0}
-    \caption{Lorem Ipsum}
-    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
-\end{figure}
-
-\begin{figure}%[!bt]
-    \centering
-    \label{fig:r0}
-    \caption{Lorem Ipsum}
-    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
-\end{figure}
-
-\begin{figure}%[!bt]
-    \centering
-    \label{fig:r0}
-    \caption{Lorem Ipsum}
-    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
-\end{figure}
-
-\begin{figure}%[!bt]
-    \centering
-    \label{fig:r0}
-    \caption{Lorem Ipsum}
-    \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_09_03_2016_09_04_2016_1socket.pdf}
-\end{figure}
+%\clearpage
 
 %\end{landscape}
 
