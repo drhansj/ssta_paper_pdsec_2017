@@ -571,23 +571,23 @@ Based on this analytic analysis, we can conclude that the Thomas algorithm is
 \subsection{Batching and Vectorization}
 \label{sec:implementation:batching_and_parallelism}
 
-\begin{figure}[!bt]
+\begin{figure*}[!bt]
   \centering
   \label{fig:independent_solve_strategy}
   \caption{
     \textbf{Independent Solve Strategy:} \fxnote{Lorem Ipsum}
   }
-  \includegraphics[width=0.95\columnwidth]{figures/tds_scalar.pdf}
-\end{figure}
+  \includegraphics[width=0.95\textwidth]{figures/independent_solve.pdf}
+\end{figure*}
 
-\begin{figure}[!bt]
+\begin{figure*}[!bt]
   \centering
   \label{fig:simultaneous_solve_strategy}
   \caption{
     \textbf{Simultaneous Solve Strategy:} \fxnote{Lorem Ipsum}
   }
-  \includegraphics[width=0.95\columnwidth]{figures/tds_vector.pdf}
-\end{figure}
+  \includegraphics[width=0.95\textwidth]{figures/simultaneous_solve.pdf}
+\end{figure*}
 
 In the applications described in \S\ref{sec:introduction} we need to apply the
   Thomas algorithm to each vertical column in a \(ni \times nj \times nk\)
@@ -729,6 +729,42 @@ The \(ikj\) layout arose as an optimization to combat data locality and prefetch
 
 \subsection{Tiling}
 \label{sec:implementation:tiling}
+
+\begin{figure}[!bt]
+  \centering
+  \label{fig:implementation:tiling:ijk_layout_tile_j}
+  \caption{
+    \textbf{Tile-\(j\) Scheme with the \(ijk\)-Layout:} \fxnote{Lorem Ipsum}
+  }
+  \includegraphics[width=0.95\columnwidth]{figures/ijk_layout_tile_j_scheme.pdf}
+\end{figure}
+
+\begin{figure}[!bt]
+  \centering
+  \label{fig:implementation:tiling:ijk_layout_tile_j}
+  \caption{
+    \textbf{Tile-\(ij\) Scheme with the \(ijk\)-Layout:} \fxnote{Lorem Ipsum}
+  }
+  \includegraphics[width=0.95\columnwidth]{figures/ijk_layout_tile_ij_scheme.pdf}
+\end{figure}
+
+\begin{figure}[!bt]
+  \centering
+  \label{fig:implementation:tiling:ikj_layout_tile_j}
+  \caption{
+    \textbf{Tile-\(j\) Scheme with the \(ikj\)-Layout:} \fxnote{Lorem Ipsum}
+  }
+  \includegraphics[width=0.95\columnwidth]{figures/ikj_layout_tile_j_scheme.pdf}
+\end{figure}
+
+\begin{figure}[!bt]
+  \centering
+  \label{fig:implementation:tiling:ikj_layout_tile_j}
+  \caption{
+    \textbf{Tile-\(ij\) Scheme with the \(ikj\)-Layout:} \fxnote{Lorem Ipsum}
+  }
+  \includegraphics[width=0.95\columnwidth]{figures/ikj_layout_tile_ij_scheme.pdf}
+\end{figure}
 
 To ensure good CPU cache utilization, it is often necessary to break a larger
   grid into smaller \textbf{tiles} which better amortize nested loop overheads, expose
