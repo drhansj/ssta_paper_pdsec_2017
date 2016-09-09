@@ -76,18 +76,13 @@ xleftmargin=0.1cm,
 \newcolumntype{"}{@{\hskip\tabcolsep\vrule width 1pt\hskip\tabcolsep}}
 \makeatother
 
-\makeatletter
-\newcommand{\invishline}{%
-    \noalign {\ifnum 0=`}\fi \hrule height 0pt
-    \futurelet \reserved@a \@xhline
-}
-\newcolumntype{"}{@{\hskip\tabcolsep\vrule width 0pt\hskip\tabcolsep}}
-\makeatother
-
 \usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage[hidelinks]{hyperref}
 \usepackage{cite}
+
+\usepackage{soul}% for hl
+\usepackage{xcolor}% for background highlighting with \colorbox or \textcolor
 
 \usepackage{fixme}
 \fxusetheme{color}
@@ -97,6 +92,51 @@ xleftmargin=0.1cm,
     layout=inline, % also try footnote or pdfnote
     theme=color
 }
+
+\definecolor{fxnote}{rgb}{0.8000,0.0000,0.0000} % red
+\colorlet{fxnotebg}{yellow}
+
+\makeatletter
+\renewcommand*\FXLayoutInline[3]{%
+  \@fxdocolon {#3}{%
+    \@fxuseface {inline}%
+    \begingroup
+      \sethlcolor{fx#1bg}%
+      \color {fx#1}\ignorespaces \hl{#3\@fxcolon #2}%
+    \endgroup%
+  }%
+}
+\makeatother
+
+\makeatletter
+\renewcommand*\FXLayoutMargin[3]{%
+  \marginpar[%
+    \@fxdocolon {#3}{%
+      \raggedleft%
+      \@fxuseface {margin}%
+      \begingroup
+        \sethlcolor{fx#1bg}%
+        \color {fx#1}\ignorespaces \hl{#3\@fxcolon #2}%
+      \endgroup%
+    }%
+  ]{%
+    \@fxdocolon {#3}{%
+      \raggedright%
+      \@fxuseface {margin}%
+      \begingroup
+        \sethlcolor{fx#1bg}%
+        \color {fx#1}\ignorespaces \hl{#3\@fxcolon #2}%
+      \endgroup%
+    }%
+  }%
+}
+\makeatother
+
+%\newcommand{\fxnote}[1]{\fxnote{\colorbox{yellow}{\color{red}#1}}}
+%\newcommand{\fxnotefootnote}[1]{\fxnote[footnote]{\colorbox{yellow}{\color{red}#1}}}
+
+% Make fxnote footnotes have a background color and text color
+\renewcommand\thefootnote{\colorbox{yellow}{\color{red}\arabic{footnote}}}
 
 \pagenumbering{arabic}
 
@@ -418,6 +458,12 @@ In total, \(6nk-2\) elements are moved.
 Assuming double precision, \(48nk-16\) bytes are moved from main memory
   during execution of the Thomas algorithm.
 
+We verified our analytic model by measuring hardware performance counters which
+  track memory traffic with the Intel VTune Amplifier
+  profiler~\cite{intel_vtune_amplifier}.
+We found that memory bandwidth measured via hardware counters generally agreed
+  with effective bandwidth computed using our analytic model.
+
 This gives us a FLOPs/byte ratio of \((5nk-4)/(48nk-16)\) (FMA) or
   \((8nk-7)/(48nk-16)\) (non-FMA).
 The lower bound for the Thomas algorithm's arithmetic intensity is \(1/32\)
@@ -426,7 +472,6 @@ The upper bound is \(5/48\) FLOPS/byte (FMA) or \(1/6\) FLOPs/byte (non-FMA) as
   \(nk\) approaches infinity.
 Based on this analytic analysis, we can conclude that the Thomas algorithm is
   \emph{memory-bandwidth bound}.
-
 
 \subsection{Batching and Vectorization}
 \label{sec:implementation:batching_and_parallelism}
@@ -466,6 +511,8 @@ In the applications described in \S\ref{sec:introduction} we need to apply the
   Cartesian grid, where \(i\) and \(j\) are horizontal dimensions and \(k\) is
   the vertical index.
 These computations are known as the \emph{vertical solves}.
+Since each vertical solve is independent of the others, this is an
+  embarrassingly parallel problem.
 The matrix coefficients for each column depend on the problem state, so a
   unique matrix for each column needs to be constructed before each solve.
 There are two different approaches to computing these batch solves.
@@ -1127,104 +1174,17 @@ The KNL microarchitecture has a number of novel features including on-package
   direct-mapped last-level cache), 4 hyper-threads per core and dual 512-bit
   AVX512 vector units.~\cite{roofline_knl,sodani_slides}
 
-\fxnote{Mention that we used quadcache}
-
-%There are primarily four broad characteristics distinguishing the Knight's
-%Landing from our traditional CPU platforms:
-%
-%\begin{itemize}
-%\item \textbf{AVX512:} Knight's Landing has more vector units than our other
-%platforms, and the vector width has been increased from 256 bits to 512 bits.
-%AVX512 introduces new mask registers, and most vector operations support
-%masking. Additionally, AVX512 has conflict detection instructions. 
-%\item \textbf{Manycore Design:} Knight's Landing has twice as many
-%cores and eight times as many hardware-threads per socket as our
-%other platforms. Knight's Landing cores are \emph{light} cores based the Silvermont,
-%an Intel Atom design, while our other platforms feature \emph{heavy} cores based on
-%the Intel Core design.
-%\item \textbf{Intra-Socket NUMA Effects:} Knight's Landing adds two new layers
-%to the traditional hardware-thread \(\subset\) core \(\subset\) socket
-%topology. A Knight's Landing socket contains four quadrants (each containing a
-%fourth of the cores and DDR4 memory), and can be configured to expose each of
-%these quadrants as a distinct NUMA domain. Additionally, each quadrant can be
-%further subdivided into 2-core tiles.
-%\item \textbf{High Bandwidth Memory and Different Cache Design:}
-%Perhaps the most notable feature of the Knight's Landing microarchitecture is the
-%on-package high-bandwidth MCDRAM (16GBs on our platform, with a pin bandwidth
-%of NUMBER GB/s). While Knight's Landing has no traditional L3 cache, the MCDRAM
-%can be configured as a hardware managed last level cache. Alternatively, the MCDRAM
-%can be configured for explicit allocation and management by user code. The L2 
-%design on Knight's Landing is also a departure from contemporary Xeon platforms.
-%The two cores in a tile share a 16-way associative, inclusive 1MB L2 cache.
-%Contemporary Xeons typically have an 8-way associative L2 cache which is local
-%to each core and non-inclusive/non-exclusive with the L1D cache. Knight's
-%Landing has 512KB of L2 capacity per core, while our other platforms have only
-%256KB of L2 capacity per core (note that all platforms have 128KB L2 capacity
-%per \emph{hardware-thread}). The L1D caches on Knight's Landing are similar to
-%contemporaries.
-%\end{itemize}
-%
-%The Knight's Landing processors can be configured for different NUMA topologies
-%and MCDRAM uses. Each quadrant can exposed as a separate NUMA domain, two NUMA
-%domains can be exposed (each containing one quadrant) or a single NUMA domain
-%can be exposed (containing all cores). As mentioned above, the MCDRAM can either
-%be configured to act as a last level cache, or it can be made available as
-%programmable memory.
-%
-%For our experiments, we primarily ran in the \lstinline{quadcache} mode, which
-%exposes a single NUMA locality and uses the MCDRAM as a last level cache. This
-%mode allows users to run applications on Knight's Landing without any
-%modifications to address NUMA effects or utilize MCDRAM. We were interested in
-%investigating the performance of this particular mode as we believe it is the
-%best effort for adoption of the microarchitecture.
-%%}
-%
-%\fxnote{Mention Hybrid Mode}
-
-%\subsection{Parallelization and Affinity}
-%\label{sec:experimental_setup:parallelization_and_affinity}
-%
-%%{\color{red} CUT TO 1pp/MOVE TO README \\
-%The TSB variants used in the work described in this paper are parallelized
-%using simple OpenMP pragmas. The problem is embarrassingly parallel; there is
-%no dependency or data exchange whatsoever between different columns during the
-%vertical solve. As such, we largely do not discuss scalability as a function of
-%the number of processing units in this paper; we are instead interested in
-%comparing performance against the manufacturer-specified pin bandwidth. Note,
-%however, that as the Thomas algorithm has a low algorithmic intensity and is
-%memory bandwidth bound, linear scaling should not be expected; memory-bandwidth
-%bound codes typically experience non-linear effects, achieving super-linear
-%performance at lower degrees of parallelism (exploiting shared caches, etc) and
-%leveling off once the memory controller has saturated.
-%
-%The results presented in this paper show results on both 1 processing unit and
-%1 socket. On our Ivy Bridge and Haswell platforms, we had 2 sockets available
-%per node, however, we chose to limit ourselves to studying performance on a
-%single socket to avoid needing to invest effort into optimizing for
-%inter-socket NUMA effects. We did not believe that such efforts would be
-%beneficial to the production applications we are working with. Our strategy for
-%running on on multi-socket nodes in our production climate application is to
-%run one or more threaded processes per NUMA domain and never run a process
-%which spans two inter-socket NUMA domains (on Knight's Landing, there are
-%intra-socket NUMA effects, but they do not have the same magnitude of impact on
-%application performance and thus it might be feasible to run processes across
-%multiple intra-socket NUMA domains on that platform). 
-%
-%It was important to ensure that threads were correctly pinned to processing
-%units in all our experiments. For the experiments presented in this paper, we
-%utilized one OS-thread per processing unit. In this threading regime, we wanted
-%to pin OS-threads to hardware-threads to eliminate the possibility of systemic
-%experimental uncertainty caused by the kernel context switching our OS-threads
-%between different hardware-threads on a processing unit. E.g. we wanted to bind
-%each OS-thread to a particular hardware-thread on a core, instead of binding
-%each OS-thread to an entire core. We used hwloc~\cite{}, an affinity and
-%topology framework, to achieve the desire thread pinning.
-%%}
+Knight's Landing processors can be configured for different Non-Uniform Memory
+  Access (NUMA) topologies.
+Additionally, the MCDRAM can be configured as programmable memory, a direct-mapped
+  last-level cache or a combination of the two~\cite{sodani_slides}.
+We used a \lstinline{quadcache} configuration, where all processing units are
+  in a single NUMA domain and all 16GB of MCDRAM are used as a
+  cache~\cite{roofline_knl}.
 
 \subsection{Toolchain}
 \label{sec:experimental_setup:toolchain}
 
-%{\color{red} CUT EXCEPT FOR RESULTS \\
 TSB is written in ISO C++14 and has no external software dependencies.
 The code contains no vector intrinsics or vector assembly.
 We rely entirely on the compiler vectorization engine for performant vector code
@@ -1238,41 +1198,78 @@ We have also found it leads to better code generation by giving the compiler
   the freedom to select the correct instructions and perform optimizations which
   we have found to be inhibited by explicit vector intrinsics, such as
   post-vectorization loop unrolling.
-Task parallelization is implemented using OpenMP \lstinline{#pragma}s.
+Task parallelization is implemented using OpenMP
+  \lstinline{#pragma}s~\cite{openmp}.
+Since the problem is embarrassingly parallel in the horizontal dimensions, it
+  is easy to statically load balance (dimension extents and tile sizes
+  permitting).
 The hwloc affinity and topology framework~\cite{hwloc} is used to pin
   application threads to hardware execution resources.
 
 The Intel C++ Compiler~\cite{intel_cpp_compiler} was used to compile the TSB
   suite for all of the results presented in this paper.
 We used the 2017 Beta Update 2 version (\lstinline{17.0.0 20160517}).
-We also used the Intel VTune Amplifier profiler~\cite{intel_vtune_amplifier}
-  and the Intel Vectorization Advisor~\cite{intel_vectorization_advisor} profiler
-  during our research.
+We also used the Intel VTune Amplifier general-purpose
+  profiler~\cite{intel_vtune_amplifier} and the Intel
+  Advisor~\cite{intel_advisor} vectorization and threading profiler during our
+  research.
 Both tools are sampling profilers which can gather data and analyze data from
   hardware-based performance monitoring facilities.
 
-%A compliant optimizing and vectorizing C++14 compiler is required to build the
-%software. Currently only the Intel C++ Compiler is supported. Other C++14
-%compilers should work with minor modifications. The only non-standard features
-%used are POSIX APIs (memory allocation and environmental variable retrieval),
-%the \lstinline{__builtin_assume()} intrinsic, the
-%\lstinline{__builtin_assume_aligned()} intrinsic, the \lstinline{__restrict__}
-%type qualifier and the GCC-style attribute
-%\lstinline{__attribute__((always_inline))}. 
+\subsection{Statistical Considerations}
+\label{sec:experimental_setup:stats}
 
-%Version X of the Intel C++ Compiler or later should be used. Version Y was used
-%to compile the binaries which were used to produce the results in this paper.
-%Version Z is known to correctly compile the code, however limitations in the
-%vectorization engine cause unnecessary remainder loops to be generated. Usage
-%of an older version of the Intel C++ Compiler may cause sub-optimal code
-%generation which degrades the performance of the benchmark.
+\textbf{Effective bandwidth} as our primary performance metric.
+We define effective bandwidth as \textbf{effective data movement} \(/\)
+  \textbf{solver execution time}.
 
-%}
+We use the analytic performance model for data movement in the Thomas algorithm
+  defined in \S\ref{sec:implementation:thomas_algorithm} to estimate effective
+  data movement.
+To measure solver execution time, we average the wall-clock execution time of
+  each timestep and then divide by the number of timesteps.
+We measure OpenMP parallelization, e.g. we time the \lstinline{#pragma omp for}
+  loop instead of measuring the duration of each iteration individually.
+Thus, parallel overheads are included in our recorded execution times.
+Timing measurements are recorded using \lstinline{std::chrono::steady\_clock},
+  which uses a system clock with is monotonically
+  increasing~\cite{cpp14_standard_chrono_steady_clock}.
+On the three platforms we ran on, \lstinline{std::chrono::steady\_clock} has
+  nanosecond resolution.
 
-\subsection{Quantification of Performance and Statistical Concerns}
-\label{sec:experimental_setup:perf_model_and_stats}
+We performed each individual experiment multiple times on different nodes on
+  our test systems.
+We estimated variance (e.g. random observational error) between \emph{different
+  executions of the benchmark with identical parameters} by computing sample
+  standard deviation.
+All measurements presented are \textbf{95\% confidence intervals} constructed
+  from the mean and sample standard deviation of the dataset.
+Graphical visualizations display confidence bars for Knight's Landing results.
+The magnitude of the confidence intervals for Ivy Bridge and Haswell results is
+  so small that it is not feasible to visualize them.~\cite{benchmarking_cpp_code}
 
-\fxnote{Timings done with \lstinline{std::chrono::steady\_clock}}
+We believe there are two potential sources of non-trivial \textbf{systemic
+  observational error} in our results.
+First, mistakes in our analytic performance model for data movement could potentially
+  skew our results.
+We mitigated this by verifying the model with hardware-based
+  profilers (Intel VTune Amplifier~\cite{intel_vtune_amplifier}), and we are confident
+  in the validity of the model.
+Second, variance in the execution times of \emph{individual timesteps} is not
+  accounted for.
+We currently average the execution time of all timesteps
+  within a single execution of a benchmark, but do not compute and record
+  sample standard deviation as a variance estimation.
+Removing this source of systemic error would be straightforward, but
+  would require extending our postprocessing framework to compute running 
+  sample standard deviations~\cite{benchmarking_cpp_code} which we have not
+  yet implemented.
+Sources of \textbf{random observational error} include Work starvation and
+  varying performance of the memory subsystem due to system variance and OS
+  noise.
+
+% Can't time the execution of each individual tile; The timing overheads become
+% too great and cause substantial systemic experimental error.
 
 %===========================================================================
 \section{Results}
@@ -1285,7 +1282,7 @@ Both tools are sampling profilers which can gather data and analyze data from
     \centering
     \label{fig:results:tile_size_ivb}
     \caption{
-      \textbf{SSTA Total Tile Size vs Effective Bandwidth (Ivy Bridge)}
+      \textbf{Total Tile Size vs Effective Bandwidth (Ivy Bridge)}
     }
     \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
   \end{minipage}
@@ -1293,7 +1290,7 @@ Both tools are sampling profilers which can gather data and analyze data from
     \centering
     \label{fig:results:tile_size_hsw}
     \caption{
-      \textbf{SSTA Total Tile Size vs Effective Bandwidth (Haswell)}
+      \textbf{Total Tile Size vs Effective Bandwidth (Haswell)}
     }
     \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
   \end{minipage}
@@ -1305,7 +1302,7 @@ Both tools are sampling profilers which can gather data and analyze data from
     \centering
     \label{fig:results:tile_size_knl}
     \caption{
-      \textbf{SSTA Total Tile Size vs Effective Bandwidth (Knight's Landing)}
+      \textbf{Total Tile Size vs Effective Bandwidth (Knight's Landing)}
     }
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
   \end{minipage}
@@ -1313,7 +1310,7 @@ Both tools are sampling profilers which can gather data and analyze data from
     \centering
     \label{fig:results:efficiency}
     \caption{
-      \textbf{SSTA Efficiency (\% of STREAM Triad Effective Bandwidth)}
+      \textbf{\% of STREAM Triad Effective Bandwidth}
     }
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_09_03_2016_09_04_2016_1socket.pdf}
   \end{minipage}
@@ -1322,7 +1319,7 @@ Both tools are sampling profilers which can gather data and analyze data from
 % Hypothesis 1.1: SSTA can outperform legacy solver
 % Hypothesis 1.2: SSTA can efficiently utilize memory bandwidth 
 % Prediction 1.1 and Prediction 1.2 follow naturally 
-We developed SSTA to replace the underperforming LAPACK-based vertical column
+We developed SSTA to replace the underperforming MKL-based vertical column
   solver in our production climate application because we believed that a new
   algorithm which solves multiple vertical columns simultaneously would
   efficiently utilize available memory bandwidth and significantly outperform the
@@ -1485,7 +1482,7 @@ We posit a modified version of our prediction is more accurate than our initial
 
 \fxnote{Say something about overall win/importance of tiling}
 
-\subsection{Comparison Against MKL and STREAM Triad}
+\subsection{Performance Comparison}
 \label{sec:results:comparison}
 
 % Analysis of Prediction 1.1 (can outperform legacy solver)
