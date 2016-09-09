@@ -82,7 +82,7 @@ xleftmargin=0.1cm,
 
 \pagenumbering{arabic}
 
-%\linespread{2}
+\linespread{2}
 
 %===========================================================================
 \begin{document}
@@ -740,8 +740,9 @@ On the other hand tiling is very fundamental to our SSTA solver.
 Our analytical performance model (\S\ref{sec:implementation:thomas_algorithm})
   is based on caching assumptions which we rely on tiling to enforce.
 In particular, we assume that all four arrays (\(a\), \(b\), \(c\) and \(u\))
-  to remain in cache in between the forward elimination and the back substitution
-  loops.
+  to remain in the cache hierarchy in between the forward elimination and the
+  back substitution loops.
+On x86-64 SIMD architectures, we typically aim to fit within the L2 cache.
 If any of these four arrays need to be reloaded from main memory in between the
   forward elimination and back substitution loops, the amount of main memory data
   movement is significantly increased and the algorithmic intensity of the
@@ -749,6 +750,15 @@ If any of these four arrays need to be reloaded from main memory in between the
 While our untiled SSTA results outperform the MKL baseline results (Figure
   \ref{fig:results:efficiency}), they were well below the manufacturer-specified
   bandwidth and STREAM Triad effective bandwidth.
+
+Because it is necessary for all four arrays to remain in the cache hierarchy, 
+  it is important to note the distinction between \textbf{per-array tile size}
+  (e.g. the tile size for one of the four arrays) and the
+  \textbf{total tile size} (e.g. the sum of the per-array tile sizes).
+The total tile size is the amount of data we need to remain in cache in between
+  the forward elimination and back substitution loops.
+
+\fxnote{Use total tile size/per-array tile size from this point forward}
 
 Due to the loop-carried dependencies in the Thomas algorithm and the small
   extent of \(nk\), we could not tile the vertical dimension. So, we explored two
@@ -1333,6 +1343,11 @@ Both tools are sampling profilers which can gather data and analyze data from
 
 %}
 
+\subsection{Quantification of Performance and Statistical Concerns}
+\label{sec:experimental_setup:perf_model_and_stats}
+
+\fxnote{Timings done with \lstinline{std::chrono::steady\_clock}}
+
 %===========================================================================
 \section{Results}
 \label{sec:results}
@@ -1344,7 +1359,7 @@ Both tools are sampling profilers which can gather data and analyze data from
     \centering
     \label{fig:results:tile_size_ivb}
     \caption{
-      \textbf{SSTA Tile Size vs Effective Bandwidth (Ivy Bridge)}
+      \textbf{SSTA Total Tile Size vs Effective Bandwidth (Ivy Bridge)}
     }
     \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
   \end{minipage}
@@ -1352,7 +1367,7 @@ Both tools are sampling profilers which can gather data and analyze data from
     \centering
     \label{fig:results:tile_size_hsw}
     \caption{
-      \textbf{SSTA Tile Size vs Effective Bandwidth (Haswell)}
+      \textbf{SSTA Total Tile Size vs Effective Bandwidth (Haswell)}
     }
     \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
   \end{minipage}
@@ -1364,7 +1379,7 @@ Both tools are sampling profilers which can gather data and analyze data from
     \centering
     \label{fig:results:tile_size_knl}
     \caption{
-      \textbf{SSTA Tile Size vs Effective Bandwidth (Knight's Landing)}
+      \textbf{SSTA Total Tile Size vs Effective Bandwidth (Knight's Landing)}
     }
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
   \end{minipage}
@@ -1378,7 +1393,121 @@ Both tools are sampling profilers which can gather data and analyze data from
   \end{minipage}
 \end{figure*}
 
-\fxnote{Timings done with \lstinline{std::chrono::steady\_clock}}
+% Hypothesis 1.1: SSTA can outperform legacy solver
+% Hypothesis 1.2: SSTA can efficiently utilize memory bandwidth 
+% Prediction 1.1 and Prediction 1.2 follow naturally 
+We developed SSTA to replace the underperforming LAPACK-based vertical column
+  solver in our production climate application because we believed that a new
+  algorithm which solves multiple vertical columns simultaneously would
+  efficiently utilize available memory bandwidth and significantly outperform the
+  legacy solver by exhibiting performant data movement patterns and facilitating
+  vectorization.
+
+% Hypothesis 2: SSTA will be highly sensitive to total tile size and will
+% achieve optimal performance for a particular tile size that balances
+% reuse/locality/amortization.
+We also theorized that such a solver would be highly sensitive to
+  \textbf{total tile size} (\S\ref{sec:implementation:tiling}).
+Parallel application performance is often driven by parameters which controls
+  the amount of work in each parallel task.
+In memory-bandwidth bound applications, these parameters can be especially important
+  as they not only control the amount of parallelism exposed but also the working
+  set size and degree of cached data reuse in each individual task.
+We anticipated that we would need to study the effect of different tile sizes
+  in order understand the performance of our new solver and determine the
+  \textbf{optimal total tile size}.
+
+The first experiment we performed was a parameter sweep of the total tile size
+  on our Xeon and Xeon Phi test platforms.
+We predicted that we would see the following: 
+\begin{itemize}
+% Prediction 2.1
+\item Total tile sizes small enough to fit into the L1D cache would not be feasible
+  because the overheads of loop constructs, parallelization and vectorization
+  would be too great relative to the execution time of useful work per
+  inner-iteration.
+These tile sizes would either require vertical extents below the sizes used
+  by the applications we are interested in (\(nk < 16\)) or horizontal
+  dimensions too small to vectorize efficiently (\(ni < 16\)).
+% Prediction 2.2
+\item The optimal total tile size would fit into the L2 cache (but not the L1D
+  cache).
+% Prediction 2.3
+\item As we move from a tile size which fits into the L2 cache to a tile size
+  which does not, we should see a drop in effective bandwidth.
+% Prediction 2.4
+\item As we move from a tile size which fits into the last level cache (the L3
+  cache for the Xeon platforms and the MCDRAM cache for Knight's Landing), we
+  should see a drop in effective bandwidth.
+% Prediction 2.5
+\item Sufficiently large tile sizes should express insufficient parallelism and
+  perform poorly due to starvation.
+\end{itemize}
+
+The results of this parameter sweep for both the \(ijk\)-layout SSTA variant and
+  the \(ikj\)-layout SSTA variant are shown in Figure
+  \ref{fig:results:tile_size_ivb} (Ivy Bridge), Figure
+  \ref{fig:results:tile_size_hsw} (Haswell) and Figure
+  \ref{fig:results:tile_size_knl}.
+Results from the TSB suite's MKL baseline solver are shown as a lower bound,
+  and STREAM Triad is shown as an upper bound. 
+A \(32 \times 147456 \times 32\) grid of double precision floating point values
+  was used on all platforms.
+The total problem size was 4.5GB.
+
+% Analysis of Prediction 2.1
+As we predicted, total tile sizes small enough to fit into the L1D cache were
+  impractically small.
+% (32KB*1/2*1/4*1/sizeof(double))*(1/nk)*(1/ni)
+%       ^^^ ^^^
+%        1   2
+% 1: reasonable target working set size 
+% 2: # of arrays
+We would have to either reduce either the vertical extent or the horizontal
+  extent \(ni\) to generate a tile size small enough to fit into the 32KB L1D
+  with the tile-\(j\) scheme.
+We ran preliminary experiments with \(ni=16\) (not shown) to observe the effect
+  of 16KB total tile sizes.
+The results indicated decreased performance in comparison to \(ni=16\) and
+  \(ni=32\) 32KB total tile size results (for \emph{both} data SSTA data layouts).
+At \(ni=16\), the trip count on some of the loops in SSTA is so small that the
+  compiler cannot perform as much unrolling after vectorization as it would for
+  larger \(ni\)s.
+\fxnote[footnote,noinline]{Worth mentioning for future work}
+We have not determined if switching to the tile-\(ij\) scheme might make
+  smaller tile sizes feasible without decreasing the extent of the horizontal
+  dimension \(ni\) or decreasing performance via worse data contiguity.
+
+% Analysis of Prediction 2.2
+On Knight's Landing, the optimal total tile size for the \(ikj\)-layout is 32KB,
+  which fits within the L2 cache but likely does not entirely fit into the L1D
+  cache.
+We are 95\% confident the effective bandwidth of the SSTA \(ikj\)-layout variant
+  is between 364 GB/s and 376 GB/s.
+
+However, on Ivy Bridge and Edison, the optimal tile size for the \(ikj\)-layout
+  is between 32KB and 256KB (we cannot statistically distinguish between the results
+  as the 95\% confidence intervals overlap).
+The 256KB tile size is too large to fit entirely within the L2 cache on these
+  platforms as it would require 100\% of the L2 capacity.
+
+% For ijk, the optimal tile size is larger. On KNL, the optimal tile size, 128KB,
+% fits within L2 cache. On both Xeon platforms, the optimal tile size is 256KB.
+% KNL: The optimal tile size fits within the L2 cache for both layouts. For ijk,
+% the best tile size is 128KB. 
+
+% For ijk, performance drops off for smaller tile sizes;
+% profiling indicated that this was due to a high number of L1 TLB misses. This
+% follows. As discussed in \S\ref{tiling}, tiles in the ijk-layout are made up 
+% of nk horizontal ij-planes. As the per-array tile size is decreased, the size
+% of the contiguous regions decreases, and reuse of TLB entries decreases.
+% We suspect that hardware prefetching is also impacted, especially on KNL. 
+
+% The poor performance of the ijk-layout at smaller tile sizes led us to develop
+% the ikj-layout variant of the SSTA algorithm. On the KNL, the ikj-layout had
+% the desired effect and substantially increased effective bandwidth.
+
+
 
 %We present the results of two experiments which characterize the impact of the
 %optimizations described in this paper, support the predictions about optimal
