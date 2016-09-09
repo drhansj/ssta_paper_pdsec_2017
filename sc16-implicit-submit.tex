@@ -335,7 +335,20 @@ In practical applications, a different matrix \(A\) exists for each \((i,j)\)
   location, because the diagonals may depend on the previous solution \(u^{s}\)
   (in a non-linear iteration loop, for example).
 
-\fxnote{Paragraph overview of SSTA solver}
+% Overview of SSTA solver.
+We present the Simultaneous Streaming Thomas Algorithm (SSTA), a tridiagonal
+  matrix solver based on the Thomas
+  algorithm~\cite{ConteEtAlElementaryNumericalAnalysis,QuarteroniEtAl2007,TDMA}
+  which was designed to solve large quantities of relatively small (\(O(30-100\))
+  systems efficiently.
+The SSTA solver computes the solution to multiple systems simultaneously, facilitating
+  the use of vector instructions.
+Additionally, SSTA iterates through memory in unit stride to enable software and 
+  hardware prefetching facilities to easily track the data streams used in the solver.
+We compare performance against STREAM Triad~\cite{stream} and a baseline solver
+  derived from a production climate code which utilizes the Intel Math Kernel
+  Library (MKL) and exposes task parallelism, but solves each matrix
+  independently and does not utilize vector processing capabilities.
 
 \subsection{The Thomas Algorithm}
 \label{sec:implementation:thomas_algorithm}
