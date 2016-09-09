@@ -554,17 +554,21 @@ Based on this analytic analysis, we can conclude that the Thomas algorithm is
 \label{sec:implementation:batching_and_parallelism}
 
 \begin{figure}[!bt]
-    \centering
-    \label{fig:independent_solve_strategy}
-    \caption{\textbf{Independent Solve Strategy:} Lorem Ipsum}
-    \includegraphics[width=0.95\columnwidth]{figures/tds_scalar.pdf}
+  \centering
+  \label{fig:independent_solve_strategy}
+  \caption{
+    \textbf{Independent Solve Strategy:} \fxnote{Lorem Ipsum}
+  }
+  \includegraphics[width=0.95\columnwidth]{figures/tds_scalar.pdf}
 \end{figure}
 
 \begin{figure}[!bt]
-    \centering
-    \label{fig:simultaneous_solve_strategy}
-    \caption{\textbf{Simultaneous Solve Strategy:} Lorem Ipsum}
-    \includegraphics[width=0.95\columnwidth]{figures/tds_vector.pdf}
+  \centering
+  \label{fig:simultaneous_solve_strategy}
+  \caption{
+    \textbf{Simultaneous Solve Strategy:} \fxnote{Lorem Ipsum}
+  }
+  \includegraphics[width=0.95\columnwidth]{figures/tds_vector.pdf}
 \end{figure}
 
 In the applications described in \S\ref{sec:introduction} we need to apply the
@@ -1183,8 +1187,11 @@ It is a many-core design with a 2D mesh of \emph{light} cores optimized
   and reduced complexity in other areas (branch prediction, out-of-order
   execution facilities, pipeline depth, etc).
 The KNL microarchitecture has a number of novel features including on-package
-  high-bandwidth MCDRAM (which can be used as programmable memory or a direct-mapped
-  last-level cache), 4 hyper-threads per core and dual 512-bit AVX512 vector units.~\cite{roofline_knl,sodani_slidedeck}
+  high-bandwidth MCDRAM (which can be used as programmable memory or a
+  direct-mapped last-level cache), 4 hyper-threads per core and dual 512-bit
+  AVX512 vector units.~\cite{roofline_knl,sodani_slidedeck}
+
+\fxnote{Mention that we used quadcache}
 
 %There are primarily four broad characteristics distinguishing the Knight's
 %Landing from our traditional CPU platforms:
@@ -1371,378 +1378,42 @@ Both tools are sampling profilers which can gather data and analyze data from
   \end{minipage}
 \end{figure*}
 
-We present the results of two experiments which characterize the impact of the
-optimizations described in this paper, support the predictions about optimal
-grain size that we made in Section \ref{} and show how the SSTA algorithm
-performs in comparison with the legacy LAPACK-based approach used in our
-production climate application and the theoretical performance model we
-described in Section \ref{}.
+\fxnote{Timings done with std::chrono::steady_clock}
 
-The first experiment is a parameter sweep of different tile sizes. We conducted
-the parameter sweep for all tiled and parallelized TSB variants that were
-feature complete at the time. Although it met those requirements, we excluded
-the MKL variant which uses the kji layout and does gather-style copies of u
-into contiguous buffers to pass to LAPACK. Although it most closely mirrors the
-performance of the original state of the production code, it is not reasonable
-a reasonable reference point because it performs allocations within the timed 
-region.
-
-All variants were used double precision data types, a full grid scheme and
-OpenMP for parallelization. We used a LAPACK-based ijk layout variant which
-uses Intel's MKL library. All the other variants were different instantiations
-of the SSTA algorithm:
-
-%\begin{itemize} 
-%\end{itemize}
-
-Recall that we use the \textbf{tile width} parameter tw (e.g. the j extent of
-the tile) to control the \textbf{tile size} (e.g. the sum of the size of a
-single tile of a, b, c and u). Also recall that we allocate nixnjxnk elements
-instead of nixnjxn(k-1) for the diagonal arrays a and c to simplify our cache
-aliasing conflict mitigation strategy, so the true size of a tile is the
-slightly larger \textbf{tile storage size}, although the extra tile elements
-are never accessed. As described in Section \ref{}, we set ni and nk as 32 for
-this experiment, so the tile storage size will often be a power of 2. To
-simplify visualization, we will use tile storage size instead of tile size or
-tile width in our discussion of this parameter sweep.
-
-%\begin{landscape}
-%\addtolength{\hoffset}{-30pt}
-%\addtolength{\voffset}{16pt}
-%\begin{figure}[!bt]
-%    \centering
-%    \label{fig:r0}
-%    \caption{\color{red} REMOVE PERMUTATIONS/COLLAPSE TO 1 PLOT/JUST PICK BEST TILE SIZE TO COMPARE}
-%    \subfloat[
-%        Lorem ipsum 1
-%    ]{
-%        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_1pus.pdf}
-%        \label{fig:r0c0}
-%    }
-%    \subfloat[
-%        Lorem ipsum 2
-%    ]{
-%        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_1pus.pdf}
-%        \label{fig:r0c1}
-%    }
-%    \subfloat[
-%        Lorem ipsum 3
-%    ]{
-%        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_1pus.pdf}
-%        \label{fig:r0c2}
-%    }
-%    \hspace{0mm}
-%    \label{fig:r1}
-%    \caption{\color{red} REMOVE PERMUTATIONS/COLLAPSE TO 1 PLOT/JUST PICK BEST TILE SIZE TO COMPARE}
-%    \subfloat[
-%        Lorem ipsum 4
-%    ]{
-%        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
-%        \label{fig:r1c0}
-%    }
-%    \subfloat[
-%        Lorem ipsum 5
-%    ]{
-%        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
-%        \label{fig:r1c1}
-%    }
-%    \subfloat[
-%        Lorem ipsum 6
-%    ]{
-%        \includegraphics[width=0.33\linewidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
-%        \label{fig:r1c2}
-%    }
-%\end{figure}
-%\end{landscape}
-
-%\begin{landscape}
-%\addtolength{\hoffset}{-30pt}
-%\addtolength{\voffset}{16pt}
-%\begin{figure}%[!bt]
-%    \centering
-%    \label{fig:r0}
-%    \caption{Lorem ipsum}
-%    \subfloat[
-%        Lorem ipsum 1
-%    ]{
-%        \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_edison_ivb_e5_2695_v2_09_03_2016_09_04_2016_12pus.pdf}
-%        \label{fig:r1c0}
-%    }
-%    \subfloat[
-%        Lorem ipsum 2
-%    ]{
-%        \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_cori_hsw_e5_2698_v3_09_03_2016_09_04_2016_16pus.pdf}
-%        \label{fig:r1c0}
-%    }
-%\end{figure}
-
-%\clearpage
-
-%\end{landscape}
-
-%\begin{figure*}[!bt]
-%    \centering
-%    \label{fig:r0}
-%    \caption{Lorem ipsum}
-%    \subfloat[
-%        Lorem ipsum
-%    ]{
-%        \includegraphics[width=0.3\textwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_knl_7210_08_21_2016_64pus.pdf}
-%        \label{fig:r0c0}
-%    }
-%    \subfloat[
-%        Lorem ipsum
-%    ]{
-%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-%        \label{fig:r0c1}
-%    }
-%    \subfloat[
-%        Lorem ipsum
-%    ]{
-%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-%        \label{fig:r0c2}
-%    }
-%    \hspace{0mm}
-%    \label{fig:r1}
-%    \caption{Lorem ipsum}
-%    \subfloat[
-%        Lorem ipsum
-%    ]{
-%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-%        \label{fig:r1c0}
-%    }
-%    \subfloat[
-%        Lorem ipsum
-%    ]{
-%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-%        \label{fig:r1c1}
-%    }
-%    \subfloat[
-%        Lorem ipsum
-%    ]{
-%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-%        \label{fig:r1c2}
-%    }
-%    \hspace{0mm}
-%    \label{fig:r2}
-%    \caption{Lorem ipsum}
-%    \subfloat[
-%        Lorem ipsum
-%    ]{
-%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-%        \label{fig:r2c0}
-%    }
-%    \subfloat[
-%        Lorem ipsum
-%    ]{
-%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-%        \label{fig:r2c1}
-%    }
-%    \subfloat[
-%        Lorem ipsum
-%    ]{
-%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-%        \label{fig:r2c2}
-%    }
-%    \hspace{0mm}
-%    \label{fig:r3}
-%    \caption{Lorem ipsum}
-%    \subfloat[
-%        Lorem ipsum
-%    ]{
-%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-%        \label{fig:r3c0}
-%    }
-%    \subfloat[
-%        Lorem ipsum
-%    ]{
-%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-%        \label{fig:r3c1}
-%    }
-%    \subfloat[
-%        Lorem ipsum
-%    ]{
-%        \includegraphics[width=0.3\textwidth]{figures/placeholder.png}
-%        \label{fig:r3c2}
-%    }
-%\end{figure*}
-
-%\begin{figure}%[thbp]
-%\centering
-%\caption{\textbf{Tile Size vs Bandwidth on Ivy Bridge:}}
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%Line graph, with vertical lines for cache sizes and a horizontal line for pin bandwidth.
-%Shows both ijk and ikj layout, demonstrates the TLB issue described in the tiling section.
-%For the ikj layout, demonstrates the five predictions we make in the tiling section.
-%1 Socket worth of cores, sweep minimum feasible tile size to something past L3 size.
-%\end{figure}
+%We present the results of two experiments which characterize the impact of the
+%optimizations described in this paper, support the predictions about optimal
+%grain size that we made in Section \ref{} and show how the SSTA algorithm
+%performs in comparison with the legacy LAPACK-based approach used in our
+%production climate application and the theoretical performance model we
+%described in Section \ref{}.
 %
-%\begin{figure}%[thbp]
-%\centering
-%\caption{\textbf{Tile Size vs Bandwidth on Haswell:}}
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%Line graph, with vertical lines for cache sizes and a horizontal line for pin bandwidth.
-%Shows both ijk and ikj layout, demonstrates the TLB issue described in the tiling section.
-%For the ikj layout, demonstrates the five predictions we make in the tiling section.
-%1 Socket worth of cores, sweep minimum feasible tile size to something past L3 size.
-%\end{figure}
+%The first experiment is a parameter sweep of different tile sizes. We conducted
+%the parameter sweep for all tiled and parallelized TSB variants that were
+%feature complete at the time. Although it met those requirements, we excluded
+%the MKL variant which uses the kji layout and does gather-style copies of u
+%into contiguous buffers to pass to LAPACK. Although it most closely mirrors the
+%performance of the original state of the production code, it is not reasonable
+%a reasonable reference point because it performs allocations within the timed 
+%region.
 %
-%\begin{figure}%[thbp]
-%\centering
-%\caption{\textbf{Tile Size vs Bandwidth on Knight's Landing:}}
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%Line graph, with vertical lines for cache sizes and a horizontal line for pin bandwidth.
-%Shows both ijk and ikj layout, demonstrates the TLB issue described in the tiling section.
-%For the ikj layout, demonstrates the five predictions we make in the tiling section.
-%1 Socket worth of cores, sweep minimum feasible tile size to something past L3 size.
-%\end{figure}
+%All variants were used double precision data types, a full grid scheme and
+%OpenMP for parallelization. We used a LAPACK-based ijk layout variant which
+%uses Intel's MKL library. All the other variants were different instantiations
+%of the SSTA algorithm:
 %
-%\begin{figure}%[thbp]
-%\centering
-%\caption{\textbf{Performance Impact of Optimizations on Ivy Bridge:}}
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%Bar graph, left to right: MKL, NAMEFORALGO, pin bandwidth
-%For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitigation, +mitigation, +tiling, +cached-div, +ikj
-%1 Socket worth of cores
-%\end{figure}
+%%\begin{itemize} 
+%%\end{itemize}
 %
-%\begin{figure}%[thbp]
-%\centering
-%\caption{\textbf{Performance Impact of Optimizations on Haswell:}}
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%Bar graph, left to right: MKL, NAMEFORALGO, pin bandwidth
-%For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitigation, +mitigation, +tiling, +cached-div, +ikj
-%1 Socket worth of cores
-%\end{figure}
-%
-%\begin{figure}%[thbp]
-%\centering
-%\caption{\textbf{Performance Impact of Optimizations on Knight's Landing:}}
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%Bar graph, left to right: MKL, NAMEFORALGO, pin bandwidth
-%For NAMEFORALGO, the stack (bottom to top) is: ijk repeated-div untiled no-mitigation, +mitigation, +tiling, +cached-div, +ikj
-%1 Socket worth of cores
-%\end{figure}
-
-%\begin{table}%[htbp]
-%\center
-%\scriptsize
-%\caption{\textbf{Comparison of Mixed-Precision and Double-Precision Algorithms}:
-%To study the trade-off in performance and accuracy between the mixed-precision
-%and double-precision variants of our algorithm, we solved a 1D diffusion
-%problem with both codes on a single Intel Xeon ??? "Ivy Bridge" core. We used
-%two measures to quantify error: the L2 norm of the difference between the
-%analytic solution and the computing solution, and the absolute maximum of the
-%residual vector of the tridiagonal solve. The test problem had storage
-%requirements of approximately ~4.3 GB. 10 sample runs were performed with each
-%sample performing 5 time steps. The walltime and uncertainty metrics below are
-%normalized to the double-precision results; the L2 norm and residual metrics
-%specify order of magnitude.
-%}
-%\small
-%\setlength{\tabcolsep}{3pt}
-%\begin{tabular}{|c|c|c|c|} \hline
-%\textbf{Algorithm} & \textbf{Walltime (Normalized)} & \textbf{L2 Norm} & \textbf{Residual} \\ \hline
-%Double-Precision   & 1.0   $\pm$ 0.007              & O(1e-07)         & O(1e-16)          \\ \hline 
-%Mixed-Precision    & 0.836 $\pm$ 0.006              & O(1e-06)         & O(1e-08)          \\ \hline
-%\end{tabular}
-%\label{tab:mixed_vs_double}
-%\end{table}
-
-%\begin{figure}%[thbp]
-%\centering
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%\caption{\fix{(Add the figure)} 
-%Baseline performance using MKL (and hand) 
-%using i-major data layout (not vectorized), for KNL, HSW.}
-%\label{fig:tbd}
-%\end{figure}
-
-%\begin{figure}%[thbp]
-%\centering
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%\caption{\fix{(Add the figure)} 
-%Performance as a function of 32b RCP NR (not needed on KNL), stored
-%reciprocal (cuts divides in half) for fixed file size (4?) }
-%\end{figure}
-
-%\begin{figure}%[thbp]
-%\centering
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%\caption{\fix{(Add the figure)} 
-%Performance vs. Tile Size (jtile = 1,2,4,8,16,32) }
-%\end{figure}
-
-%\begin{figure}%[thbp]
-%\centering
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%\caption{\fix{(Add the figure)} 
-%Best Performance vs. MKL using same data layout vs. MKL using its best
-%(include DRAM BW limit) }
-%\end{figure}
-
-%\begin{figure}%[thbp]
-%\centering
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%\caption{\fix{(Add the figure)} 
-%Performance as a function of total parallelism for constant tile size
-%[optional time permitting] }
-%\end{figure}
-
-%\begin{figure}%[thbp]
-%\centering
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%\caption{\fix{(Add the figure)} 
-%Performance with 2,3,4 hyperthreads...  maybe just prose comments?  }
-%\end{figure}
-
-%\begin{figure}%[thbp]
-%\centering
-%\includegraphics[width=0.9\columnwidth]{figures/placeholder.png}
-%\caption{\fix{(Add the figure)} 
-%effect of kdim != pow(2)... maybe just prose comments?  }
-%\end{figure}
-
-%\begin{figure}%[thbp]
-%\centering
-%\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_snb_e5_2670_08_21_2016_8pus.pdf}
-%\caption{\textbf{Tile Size vs Bandwidth on Sandybridge:}
-%Measured bandwidth of the tridiagonal solve as a function of tile size on
-%an Intel Xeon E5-2670 processor. The benchmark was run with 8 threads (each mapped
-%to a single core of the CPU) and a 7.8 GB problem size. 190 sample runs were
-%collected.}
-%\end{figure}
-%
-%\begin{figure}%[thbp]
-%\centering
-%\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_ivb_e5_2695_v2_08_21_2016_12pus.pdf}
-%\caption{\textbf{Tile Size vs Bandwidth on Ivybridge:}
-%Measured bandwidth of the tridiagonal solve as a function of tile size on
-%an Intel Xeon E5-2695 V2 processor. The benchmark was run with 12 threads (each
-%mapped to a single core of the CPU) and a 7.8 GB problem size. 160 sample runs
-%were collected.}
-%\end{figure}
-%
-%\begin{figure}%[thbp]
-%\centering
-%\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_hsw_e5_2670_v3_08_21_2016_12pus.pdf}
-%\caption{\textbf{Tile Size vs Bandwidth on Haswell:}
-%Measured bandwidth of the tridiagonal solve as a function of tile size on
-%an Intel Xeon E5-2670 V3 processor. The benchmark was run with 12 threads (each
-%mapped to a single core of the CPU) and a 7.8 GB problem size. 190 sample runs
-%were collected.}
-%\end{figure}
-%
-%\begin{figure}%[thbp]
-%\centering
-%\includegraphics[width=0.9\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_knl_7210_08_21_2016_64pus.pdf}
-%\caption{\textbf{Tile Size vs Bandwidth on Knight's Landing:}
-%Measured bandwidth of the tridiagonal solve as a function of tile size on
-%an Intel Xeon Phi 7210 processor. The benchmark was run with 64 threads (each
-%mapped to a single core of the CPU) and a 3.9 GB problem size. 130 sample runs
-%were collected. The processor was configured in the "quadcache" mode, where the
-%16GB high-bandwidth memory is configured as a data cache.}
-%\end{figure}
+%Recall that we use the \textbf{tile width} parameter tw (e.g. the j extent of
+%the tile) to control the \textbf{tile size} (e.g. the sum of the size of a
+%single tile of a, b, c and u). Also recall that we allocate nixnjxnk elements
+%instead of nixnjxn(k-1) for the diagonal arrays a and c to simplify our cache
+%aliasing conflict mitigation strategy, so the true size of a tile is the
+%slightly larger \textbf{tile storage size}, although the extra tile elements
+%are never accessed. As described in Section \ref{}, we set ni and nk as 32 for
+%this experiment, so the tile storage size will often be a power of 2. To
+%simplify visualization, we will use tile storage size instead of tile size or
+%tile width in our discussion of this parameter sweep.
 
 %===========================================================================
 \section{Conclusion}
