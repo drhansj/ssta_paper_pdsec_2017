@@ -1282,39 +1282,48 @@ The KNL microarchitecture has a number of novel features including on-package
 \label{sec:experimental_setup:toolchain}
 
 %{\color{red} CUT EXCEPT FOR RESULTS \\
-TSB is written in ISO C++14 and has no external software dependencies. The code
-contains no vector intrinsics or vector assembly. We rely entirely on the
-compiler vectorization engine for correct vector code generation, utilizing
-compiler hints to indicate alignment, loop trip count and aliasing assumptions.
-Avoiding vector intrinsics and hand-written assembly makes TSB portable between
-different x86-64 vector instruction sets (SSE, AVX, AVX2, AVX512). It also
-leads to better code by giving the compiler the freedom to select the correct
-instructions and perform optimizations which we have found to be inhibited by
-explicit vector intrinsics, such as post-vectorization loop unrolling. We
-manually inspect the compiler-generated assembly to verify that our assumptions
-about the compiler-programmer contract are being upheld.
+TSB is written in ISO C++14 and has no external software dependencies.
+The code contains no vector intrinsics or vector assembly.
+We rely entirely on the compiler vectorization engine for performant vector code
+  generation, utilizing compiler hints (via builtin functions and
+  \lstinline{#pragma} directives) to guide vectorization indicate alignment, loop
+  trip count and aliasing assumptions.
+Avoiding vector intrinsics and hand-written assembly makes TSB performance
+  portable between different x86-64 vector instruction sets (SSE, AVX, AVX2,
+  AVX512) and simplifies porting to other architectures (such as SIMT GPUs).
+We have also found it leads to better code generation by giving the compiler
+  the freedom to select the correct instructions and perform optimizations which
+  we have found to be inhibited by explicit vector intrinsics, such as
+  post-vectorization loop unrolling.
+Task parallelization is implemented using OpenMP \lstinline{#pragma}s.
+The hwloc affinity and topology framework~\cite{hwloc} is used to pin
+  application threads to hardware execution resources.
 
-A compliant optimizing and vectorizing C++14 compiler is required to build the
-software. Currently only the Intel C++ Compiler is supported. Other C++14
-compilers should work with minor modifications. The only non-standard features
-used are POSIX APIs (memory allocation and environmental variable retrieval),
-the \lstinline{__builtin_assume()} intrinsic, the
-\lstinline{__builtin_assume_aligned()} intrinsic, the \lstinline{__restrict__}
-type qualifier and the GCC-style attribute
-\lstinline{__attribute__((always_inline))}. 
+The Intel C++ Compiler~\cite{intel_cpp_compiler} was used to compile the TSB
+  suite for all of the results presented in this paper.
+We used the 2017 Beta Update 2 version (\lstinline{17.0.0 20160517}).
+We also used the Intel VTune Amplifier profiler~\cite{intel_vtune_amplifier}
+  and the Intel Vectorization Advisor~\cite{intel_vectorization_advisor} profiler
+  during our research.
+Both tools are sampling profilers which can gather data and analyze data from
+  hardware-based performance monitoring facilities.
 
-Version X of the Intel C++ Compiler or later should be used. Version Y was used
-to compile the binaries which were used to produce the results in this paper.
-Version Z is known to correctly compile the code, however limitations in the
-vectorization engine cause unnecessary remainder loops to be generated. Usage
-of an older version of the Intel C++ Compiler may cause sub-optimal code
-generation which degrades the performance of the benchmark.
+%A compliant optimizing and vectorizing C++14 compiler is required to build the
+%software. Currently only the Intel C++ Compiler is supported. Other C++14
+%compilers should work with minor modifications. The only non-standard features
+%used are POSIX APIs (memory allocation and environmental variable retrieval),
+%the \lstinline{__builtin_assume()} intrinsic, the
+%\lstinline{__builtin_assume_aligned()} intrinsic, the \lstinline{__restrict__}
+%type qualifier and the GCC-style attribute
+%\lstinline{__attribute__((always_inline))}. 
 
-We made heavy use of the Intel Vectorization Advisor and the Intel VTune
-Amplifier profiler in our research. Both tools are sampling profilers that can
-gather data and analyze data from hardware-based performance monitoring
-facilities. We used Version A of Intel Vectorization Advisor and Version B of
-Intel VTune Amplifier.
+%Version X of the Intel C++ Compiler or later should be used. Version Y was used
+%to compile the binaries which were used to produce the results in this paper.
+%Version Z is known to correctly compile the code, however limitations in the
+%vectorization engine cause unnecessary remainder loops to be generated. Usage
+%of an older version of the Intel C++ Compiler may cause sub-optimal code
+%generation which degrades the performance of the benchmark.
+
 %}
 
 %===========================================================================
