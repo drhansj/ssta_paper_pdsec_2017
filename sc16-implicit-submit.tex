@@ -144,6 +144,9 @@ xleftmargin=0.1cm,
 
 %\linespread{2}
 
+\usepackage{gitinfo2}
+\usepackage{datetime}
+
 %===========================================================================
 \begin{document}
 \title{Solving Large Quantities of Small Matrix Problems on Cache-Coherent SIMD Architectures}
@@ -157,7 +160,8 @@ xleftmargin=0.1cm,
 \alignauthor
 Bryce Adelstein Lelbach, Hans Johansen, and Samuel Williams\\
 \affaddr{Lawrence Berkeley National Laboratory, Computational Research Division}\\
-\email{{\it \{balelbach, hjohansen, swwilliams\}@lbl.gov}}
+\email{{\it \{balelbach, hjohansen, swwilliams\}@lbl.gov}}\\
+{\small Revision \gitAbbrevHash \gitReferences, Built at \currenttime \vspace{1ex} on \today}
 }
 % \IEEEauthorblockN{Bryce Adelstein Lelbach, Hans Johansen, and Samuel Williams}
 % \IEEEauthorblockA{Computational Research Division, Lawrence Berkeley National Laboratory, Berkeley, CA 94720\\ {\it \{balelbach, hjohansen, swwilliams\}@lbl.gov}}
@@ -530,7 +534,7 @@ Because the vertical solves are independent, they can be executed concurrently
   via task-level parallelism.
 Vectorization of the \(nk\) loop is not possible as each iteration of the loops
   in the Thomas algorithm is dependent on the previous iteration (e.g.
-  loop-carried dependency).
+  loop-carried dependency)~\cite{povitsky}.
 Although the LAPACK interface contains no routine for Thomas algorithm,
   \lstinline{dgtsv()} and \lstinline{dgttrs()} (which solve tridiagonal and
   banded systems, respectively) use this approach.
@@ -1138,6 +1142,7 @@ Sources of \textbf{random observational error} include Work starvation and
     }
     \label{fig:results:tile_size_ivb}
     \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
+    \label{fig:results:tile_size_ivb}
   \end{minipage}
   \begin{minipage}{0.49\textwidth}
     \centering
@@ -1169,6 +1174,7 @@ Sources of \textbf{random observational error} include Work starvation and
     }
     \label{fig:results:tile_size_knl}
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
+    \label{fig:results:tile_size_knl}
   \end{minipage}
   \begin{minipage}{0.49\textwidth}
     \centering
@@ -1182,6 +1188,7 @@ Sources of \textbf{random observational error} include Work starvation and
     }
     \label{fig:results:efficiency}
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_09_03_2016_09_04_2016_1socket.pdf}
+    \label{fig:results:efficiency}
   \end{minipage}
 \end{figure*}
 
@@ -1195,62 +1202,138 @@ We developed SSTA to replace the underperforming MKL-based vertical column
   legacy solver by exhibiting performant data movement patterns and facilitating
   vectorization.
 
-% Hypothesis 2: SSTA will be highly sensitive to total tile size and will
-% achieve optimal performance for a particular tile size that balances
-% reuse/locality/amortization.
+% Hypothesis 2: SSTA will be highly sensitive to data layout changes and total
+% tile size and will achieve optimal performance for a particular tile size
+% that balances reuse/locality/amortization.
 We also theorized that such a solver would be highly sensitive to
-  \textbf{total tile size} (\S\ref{sec:implementation:tiling}).
-Parallel application performance is often driven by parameters which controls
-  the amount of work in each parallel task.
-In memory-bandwidth bound applications, these parameters can be especially important
-  as they not only control the amount of parallelism exposed but also the working
-  set size and degree of cached data reuse in each individual task.
-We anticipated that we would need to study the effect of different tile sizes
-  in order understand the performance of our new solver and determine the
-  \textbf{optimal total tile size}.
+  \textbf{data layout changes} and
+  \textbf{total tile size}(\S\ref{sec:implementation:tiling})
+Parallel application performance is often driven by parameters such as total
+  tile size which control the amount of work in each parallel task.
+In memory-bandwidth bound applications, data layout and tiling can be
+  especially important as they not only influence the amount of task- and
+  vector-parallelism exposed but also the working set size and degree of cached
+  data reuse in each individual task.
+We anticipated that we would need to study the effect of different data layouts
+  and tile sizes in order understand the performance of our new solver.
+The first step was to determine the \textbf{optimal total tile size} for the 
+  different solver variants in the TSB suite.
 
-\subsection{Optimal Total Tile Size Parameter Sweep}
-\label{sec:results:tile_size_sweep}
+%\subsection{Optimal Total Tile Size Parameter Sweep}
+%\label{sec:results:tile_size_sweep}
 
 \begin{table*}[t]
   \centering
   \caption{
-    \textbf{Optimal Total Tile Sizes:}
+    \textbf{Performance Comparison of SSTA and MKL Solvers:} \fxnote{Lorem ipsum}
   }
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  \begin{tabular}{|l|c|c|}\hline
-    \diagbox[width=10em]{\textbf{Solver}}{\textbf{Platform}} & \textbf{Ivy Bridge \& Haswell} & \textbf{Knight's Landing} \\ \hline
-    MKL \(kji\)-layout  & 2048KB        & 2048KB \\ \hline
-    SSTA \(ijk\)-layout & 128KB - 512KB & 128KB  \\ \hline
-    SSTA \(ikj\)-layout & 32KB - 256KB  & 32KB   \\ \hline
+  \begin{tabular}{|l|r|r|r|r|}\hline
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      \multicolumn{1}{|c|}{\multirow{2}{*}{\textbf{Solver}}}
+    & \multicolumn{1}{ c|}{\textbf{Optimal Total}}
+    & \multicolumn{1}{ c|}{\textbf{Effective Bandwidth}}
+    & \multicolumn{1}{ c|}{\textbf{Percentage of STREAM}}
+    & \multicolumn{1}{ c|}{\multirow{2}{*}{\textbf{Speedup vs MKL}}} \\
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    & \multicolumn{1}{ c|}{\textbf{Tile Size}}
+    & \multicolumn{1}{ c|}{\textbf{Bandwidth}}
+    & \multicolumn{1}{ c|}{\textbf{TRIAD Bandwidth}}
+    & \\ \hline
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    \multicolumn{5}{c}{\rule{0pt}{2.25ex} \textbf{Ivy Bridge}} \\ \hline \thickhline
+    % BW, Ivy Bridge MKL kji tw_sweep tw=64 results + sig figs
+    % % STREAM, Ivy Bridge MKL kji histogram tw=64 results + sig figs
+    MKL \(kji\)-layout  &   Any &\(22.49 \pm 0.003\)&\(45.2 \pm 0.05\)& \(1x\) \\ \hline
+    % BW, Ivy Bridge SSTA ijk tw_sweep tw=8 results + sig figs 
+    % % STREAM, Ivy Bridge SSTA ijk histogram tw=8 results + sig figs
+    SSTA \(ijk\)-layout & 256 KB &\(44.0 \pm 0.07\)&\(90 \pm 0.1\)& \(\sim 2x\) \\ \hline
+    % BW, Ivy Bridge SSTA ikj tw_sweep tw=1 results + sig figs 
+    % % STREAM, Ivy Bridge SSTA ijk PAPER tw=1 results + sig figs
+    SSTA \(ikj\)-layout &  32 KB &\(43.0 \pm 0.07\)&\(87 \pm 0.2\)& \(\sim 1.9x\) \\ \hline
+    
+    \multicolumn{5}{c}{\rule{0pt}{2.25ex} \textbf{Haswell}} \\ \hline \thickhline
+    % BW, Haswell MKL kji tw_sweep tw=64 results + sig figs
+    % % STREAM, Haswell MKL kji histogram tw=64 results + sig figs
+    MKL \(kji\)-layout  &   Any &\(31.65 \pm 0.006\)&\(52.4 \pm 0.04\)& \(1x\) \\ \hline
+    % BW, Haswell SSTA ijk tw_sweep tw=8 results + sig figs 
+    % % STREAM, Haswell SSTA ijk histogram tw=8 results + sig figs
+    SSTA \(ijk\)-layout & 256KB &\(54.3 \pm 0.01\)&\(90.0 \pm 0.07\)& \(\sim 1.7x\) \\ \hline
+    % BW, Haswell SSTA ikj tw_sweep tw=1 results + sig figs 
+    % % STREAM, Haswell SSTA ijk PAPER tw=8 results + sig figs
+    SSTA \(ikj\)-layout &  32KB &\(54.2 \pm 0.01\)&\(89.7 \pm 0.06\)& \(\sim 1.7x\)\\ \hline
+
+    \multicolumn{5}{c}{\rule{0pt}{2.25ex} \textbf{Knight's Landing}} \\ \hline \thickhline
+    % BW, Knight's Landing MKL kji tw_sweep tw=64 results + sig figs
+    % % STREAM, Knight's Landing MKL kji histogram tw=64 results + sig figs
+    MKL \(kji\)-layout  &   Any &\(32 \pm 0.2\)&\(7.6 \pm 0.04\)& \(1x\) \\ \hline
+    % BW, Knight's Landing SSTA ijk tw_sweep tw=4 results + sig figs
+    % % STREAM, Knight's Landing SSTA ijk histogram tw=4 results + sig figs
+    SSTA \(ijk\)-layout & 128KB &\(280 \pm 5\)&\(66 \pm 1\)& \\ \hline
+    % BW, Knight's Landing SSTA ikj tw_sweep tw=1 results + sig figs
+    % % STREAM, Knight's Landing SSTA ikj histogram tw=1 results + sig figs
+    SSTA \(ikj\)-layout &  32KB &\(370 \pm 6\)&\(90 \pm 2\)& \(\sim 12x\) \\ \hline
   \end{tabular}
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  \label{tab:results:optimal_total_tile_sizes}
+  \label{tab:results:comparison}
 \end{table*}
 
-The first experiment we performed was a parameter sweep of the total tile size
-  on our Xeon and Xeon Phi test platforms.
+%\begin{table*}[t]
+%  \centering
+%  \caption{
+%    \textbf{Optimal Total Tile Sizes:}
+%  }
+%  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  \begin{tabular}{|l|c|c|}\hline
+%    \diagbox[width=10em]{\textbf{Solver}}{\textbf{Platform}} & \textbf{Ivy Bridge \& Haswell} & \textbf{Knight's Landing} \\ \hline
+%    MKL \(kji\)-layout  & 2048KB        & 2048KB \\ \hline
+%    SSTA \(ijk\)-layout & 128KB - 512KB & 128KB  \\ \hline
+%    SSTA \(ikj\)-layout & 32KB - 256KB  & 32KB   \\ \hline
+%  \end{tabular}
+%  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  \label{tab:results:optimal_total_tile_sizes}
+%\end{table*}
+
+We conducted a parameter sweep of total tile size on our Xeon and Xeon Phi 
+  platforms.
 We predicted that we would see the following: 
 \begin{itemize}
-% Prediction 2.1
+% Prediction 2.1: The MKL solver doesn't care about tile size, excluding
+% SLOW effects.
+\item The MKL baseline solver would be very insensitive to total tile size,
+  excluding extremely small (high overhead) and extremely large (insufficient
+  parallelism) sizes since it solves each column independently and thus cannot
+  exploit locality like the SSTA solver does.
+% Prediction 2.2: Total tile sizes which fit in the L1D will be too small to be
+% feasible.
 \item Total tile sizes small enough to fit into the L1D cache would not be feasible
-  because the overheads of loop constructs, parallelization and vectorization
-  would be too great relative to the execution time of useful work per
+  because the overheads of loop constructs and parallelization/vectorization
+  setup would be too great relative to the execution time of useful work per
   inner-iteration.
 These tile sizes would either require vertical extents below the sizes used
   by the applications we are interested in (\(nk < 16\)) or horizontal
   dimensions too small to vectorize efficiently (\(ni < 16\)).
-% Prediction 2.2
+% Prediction 2.3: Optimal total tile size will be in between L1D capacity and
+% L2 capacity.
 \item The optimal total tile size would fit into the L2 cache (but not the L1D
-  cache).
-% Prediction 2.3
-\item As we move from a tile size which fits into the L2 cache to a tile size
-  which does not, we should see a drop in effective bandwidth.
-% Prediction 2.4
-\item As we move from a tile size which fits into the last level cache (the L3
-  cache for the Xeon platforms and the MCDRAM cache for Knight's Landing), we
-  should see a drop in effective bandwidth.
+  cache), since it is the fastest cache which has the capacity to contain a
+  tile with a feasible total tile size.
+% Prediction 2.4: Performance drops as total tile size crosses cache capacity
+% boundaries, excluding L1D.
+\item Excluding the L1D, as we move from a tile size which fits into the
+  capacity of a particular cache to a tile size which does not, we should see a
+  drop in effective bandwidth.
+On the Xeon platforms, these boundaries are L2 \(\rightarrow\) L3 and L3
+  \(\rightarrow\) DRAM (main memory)
+On Knight's Landing, L2 \(\rightarrow\) MCDRAM and MCDRAM \(\rightarrow\) DRAM
+  (main memory).
 \end{itemize}
+Note that when total tile size is equal to a particular cache capacity, we say
+  that total tile size will \emph{not} entirely fit into that cache, since it is
+  not reasonable to assume that our arrays will be able to consume the entire
+  cache's capacity.
 
 The results of this parameter sweep for both the \(ijk\)-layout SSTA variant and
   the \(ikj\)-layout SSTA variant are shown in Figure
@@ -1258,19 +1341,27 @@ The results of this parameter sweep for both the \(ijk\)-layout SSTA variant and
   \ref{fig:results:tile_size_hsw} (Haswell) and Figure
   \ref{fig:results:tile_size_knl}.
 Results from the TSB suite's MKL baseline solver are shown as a lower bound,
-  and STREAM Triad is shown as an upper bound. 
+  and STREAM Triad results are shown as an upper bound. 
 A \(32 \times 147456 \times 32\) grid of double precision floating point values
-  was used on all platforms.
-The total problem size was 4.5GB.
+  (4.5GB) was used on all platforms.
+All results were run on a full socket, with one application-thread per core.
 
-\fxnote{Tablification Needed}
+% Analysis of Prediction 2.2: The MKL solver doesn't care about tile size,
+% excluding SLOW effects.
+We found that the MKL baseline solver was largely insensitive to tile size, as
+  anticipated.
+Across the range of total tile sizes we tested, we did not observe performance
+  variation that was statistically significant enough to distinguish it from
+  random experimental error.
 
-% Analysis of Prediction 2.1
+% Analysis of Prediction 2.2: Total tile sizes which fit in the L1D will be too
+% small to be feasible.
 As we predicted, total tile sizes small enough to fit into the L1D cache were
   impractically small.
-% (32KB*1/2*1/4*1/sizeof(double))*(1/nk)*(1/ni)
-%       ^^^ ^^^
-%        1   2
+% Math for exploring tile extents that might fit into L1D
+% nj=(32KB*1/2*1/4*1/sizeof(double))*(1/nk)*(1/ni)
+%          ^^^ ^^^
+%           1   2
 % 1: reasonable target working set size 
 % 2: # of arrays
 We would have to either reduce either the vertical extent or the horizontal
@@ -1278,226 +1369,301 @@ We would have to either reduce either the vertical extent or the horizontal
   with the tile-\(j\) scheme.
 We ran preliminary experiments with \(ni=16\) (not shown) to observe the effect
   of 16KB total tile sizes.
-The results indicated decreased performance in comparison to \(ni=16\) and
-  \(ni=32\) 32KB total tile size results (for \emph{both} data SSTA data layouts).
+The results indicated that tile sizes smaller than 32KB performed worse for both
+  the \(ijk\)- and \(ikj\)-layouts.
 At \(ni=16\), the trip count on some of the loops in SSTA is so small that the
   compiler cannot perform as much unrolling after vectorization as it would for
   larger \(ni\)'s.
-\fxnote[footnote,noinline]{Worth mentioning for future work}
 We have not determined if switching to the tile-\(ij\) scheme might make
   smaller tile sizes feasible without decreasing the extent of the horizontal
   dimension \(ni\) or decreasing performance via worse data contiguity.
 
-% Analysis of Prediction 2.2: The optimal total tile size would fit into the L2
-% cache (but not the L1D cache).
-On Knight's Landing, the optimal total tile size for the \(ikj\)-layout is 32KB,
-  which fits within the L2 cache but likely does not entirely fit into the L1D
-  cache.
-% tw_sweep tw=1 results + sig figs
-We are 95\% confident the effective bandwidth of the SSTA \(ikj\)-layout variant
-  is between 364 GB/s and 376 GB/s.
-However, on Ivy Bridge and Edison, the optimal tile size for the \(ikj\)-layout
-  is between 32KB and 256KB (we cannot statistically distinguish between the results
-  as the 95\% confidence intervals overlap).
-The 256KB tile size is too large to fit entirely within the L2 cache on these
-  platforms as it would require 100\% of the L2 capacity.
-% tw_sweep tw=2 results + sig figs
-On Ivy Bridge, we are 95\% confident the best effective bandwidth with the \(ikj\)-layout variant is 
-  between 43.33 GB/s and 43.47 GB/s.
-% tw_sweep tw=1 results + sig figs (I rounded 0.0099 to 0.01, we CS people after all) 
-On Haswell, we are 95\% confident the best effective bandwidth is 
-  between 54.19 GB/s and 54.21 GB/s.
+% Analysis of Prediction 2.3: Optimal total tile size will be in between L1D
+% capacity and L2 capacity.
 
-For the \(ijk\)-layout, the optimal total tile size is larger than the optimal
-  \(ikj\)-layout total tile size on all platforms.
-On Knight's Landing, the optimal total tile size is 128KB with 95\% confidence that
-  the effective bandwidth is between 265 GB/s and 275 GB/s.
-On Ivy Bridge and Haswell, the optimal total tile size is between 128KB and 512KB
-  (again, we cannot distinguish).
+% ijk Paragraph 1
+%For the \(ijk\)-layout, the optimal total tile size is larger than the optimal
+%  \(ikj\)-layout total tile size on all platforms.
+On Knight's Landing, the optimal total tile size for the SSTA \(ijk\)-layout
+  variant is 128K, which is small enough to fit within the L2 but too large
+  for the L1D. 
+% Knight's Landing tw_sweep tw=4 results + sig figs
+%with 95\% confidence that the effective bandwidth is between 265 GB/s and 275 GB/s.
+On Ivy Bridge and Haswell, the optimal total tile size for the \(ijk\)-layout 
+  is 256KB.
+% Roughly 0.16 GB/s gap between the bottom of the 256KB result and the top of
+% the next best on Ivy Bridge, roughly equivalent between the 256KB result and
+% the next best on Haswell (0.02 GB/s overlap)
+While it is difficult to distinguish between the 128KB, 256KB and 512KB results
+  in Figures~\ref{fig:results:tile_size_ivb} and~\ref{fig:results:tile_size_hsw}
+  because the magnitude of the difference is relatively small, the confidence
+  intervals do not overlap and the trend of the dataset supports this conclusion.
 % Ivy Bridge tw_sweep tw=8 results + sig figs
 % Haswell tw_sweep tw=8 results + sig figs
-We are 95\% confident the best bandwidth for the SSTA \(ijk\)-layout variant is
-  between 43.93 GB/s and 44.07 GB/s on Ivy Bridge and between 54.29 GB/s and
-  54.31 GB/s on Haswell.
+%We are 95\% confident the best bandwidth for the SSTA \(ijk\)-layout variant is
+%  between 43.93 GB/s and 44.07 GB/s on Ivy Bridge and between 54.29 GB/s and
+%  54.31 GB/s on Haswell.
 
-Interestingly, performance drops off for smaller total tile sizes with the
-  \(ijk\)-layout on all our test platforms.
-Profiling indicated that this was due to a high number of L1 TLB misses.
+% ijk Paragraph 2
+We were intrigued to find that, contrary to our predictions, the optimal total
+  tile size for the \(ijk\)-layout on the Xeon platforms was too large to fit
+  within the L2.
+Additionally, while the optimal total tile size for the \(ijk\)-layout on
+  Knight's Landing would fit within the L2 cache, performance was not as close to
+  peak as it was on the Xeon platforms (\(\sim\) 90\% of STREAM Triad bandwidth
+  on both Xeon platforms and between 65\% and 67\% on Knight's Landing; see
+  \(ijk\)-layout results in Table \ref{supertable}).
+Profiling indicated that the SSTA \(ijk\)-layout variant experienced a high
+  number of L1 DTLB store misses.
+As we decreased total tile size, we observed progressively worse TLB performance
+  in our profiling traces.
+We determined this was due to the lack of fully contiguous tiles in the
+  \(ijk\)-layout. 
 As discussed in \S\ref{sec:implementation:tiling}, tile-\(j\) tiles in the
   \(ijk\)-layout are made up of \(nk\) horizontal \(ij\)-planes. 
-As the per-array tile size is decreased, the size of the contiguous regions
-  decreases, reuse of TLB entries decreases and TLB misses become more frequent.
-We suspect that hardware prefetching is also negatively impacted, especially on
-  Knight's Landing.
+As the per-array tile size is decreased, the size of the each contiguous
+  regions decreases and the frequency of non-contiguous jumps through memory
+  increases, negatively impacting TLB, L1D and hardware prefetching performance
+  (especially on Knight's Landing).
 
-% Summary of Analysis of Prediction 2.2
+% ijk Paragraph 3
+We conducted a parameter sweep with the SSTA \(ijk\)-variant and a smaller
+  vertical extent (\(nk = 16\), not shown and impractical for production
+  applications) to further verify the cause of this issue.
+With fewer vertical levels, the number of contiguous regions in each tile would
+  be decreased and the size of each contiguous region would be increased, improving
+  contiguity.
+We observed performance improvements for smaller total tile sizes on the Xeon
+  platforms.
+On Knight's Landing the impact was much more significant.
+
+% ijk Paragraph 4 (motivation to develop ikj) 
+The poor performance of the \(ijk\)-layout at smaller total tile sizes and on
+  Knight's Landing led us to develop the \(ikj\)-layout variant of the SSTA
+  algorithm described in \S\ref{sec:implementation:data_layout}.
+The optimal total tile size for the \(ikj\)-layout was 32KB on all three
+  platforms.
+On the Xeon platforms, the best \(ikj\)-layout result does not
+  outperform the best \(ijk\)-layout result.
+However, on Knight's Landing where the best \(ikj\)-layout result achieves
+  between 91 GB/s and 109 GB/s higher effective bandwidth than the best
+  \(ijk\)-layout result (Figure~\ref{fig:results:efficiency}), a significant
+  improvement.
+
+% Summary 
 Our prediction that the optimal total tile size would be larger than L1D
-  capacity but smaller than L2 capacity held for the \(ikj\)-layout on the
-  Knight's Landing.
-On Knight's Landing, it was also correct for the \(ijk\)-layout.
-Since we cannot determine a specific optimal total tile size on the Xeon
-  platforms for either layout, and since some of the possible optimal total tile
-  sizes would not fit within the L2 cache, we cannot determine if this prediction
-  held on the Xeon platforms.
+  capacity but smaller than L2 capacity held for the \(ikj\)-layout, and for 
+  the \(ijk\)-layout on Knight's Landing.
+For the \(ijk\)-layout on the Xeon platforms, the optimal total tile size was
+  too large to fit into the L2.
+We believe the difference between optimal total tile sizes on the Xeon
+  platforms and Knight's Landing is due to the lack of a traditional L3 cache on
+  the latter, making the performance penalty greater.
+We can draw the conclusion that, for the platforms surveyed, the optimal total
+  tile size was large enough to reside in the last-level associative on-die cache
+  (the L3 on the Xeon platforms and the L2 on Knight's Landing).
 
-% ikj is a win on KNL
-The poor performance of the \(ijk\)-layout at smaller total tile sizes and our
-  subsequent profiling led us to develop the \(ikj\)-layout variant of the SSTA
-  algorithm.
-On the Xeon platforms, the best \(ikj\)-layout result is indistinguishable from
-  the best \(ijk\)-layout results.
-However, on Knight's Landing the \(ikj\)-layout had the desired effect and
-  substantially increased effective bandwidth.
-On Knight's Landing where the best \(ikj\)-layout result achieves between 91
-  GB/s and 109 GB/s higher effective bandwidth than the best \(ijk\)-layout
-  result (Figure~\ref{fig:results:efficiency}).
-
-% Analysis of Prediction 2.3 and Prediction 2.4: We should see a performance
-% drop as we cross cache capacity boundaries.
-The total tile size parameter sweep somewhat support our prediction that we
+% Prediction 2.4: Performance drops as total tile size crosses cache capacity
+% boundaries, excluding L1D.
+The total tile size parameter sweep somewhat supports our prediction that we
   would see drops in performance as we moved from total tile sizes which would
   fit into a particular cache to tile total tile sizes which would not.
 We see no such decrease at the L2 capacity boundary on the Xeon platforms, but
   we do see a drop when the total tile size exceeds L3 capacity per core.
 On Knight's Landing, we do see a drop as we cross the L2 capacity boundary.
 We posit a modified version of our prediction is more accurate than our initial
-  prediction; as we move from a tile size which fits into the last low-latency
-  associative on-die cache (the L3 on the Xeon platforms and the L2 on Knight's
-  Landing), there is a drop in the effective bandwidth of the SSTA solver.
+  prediction; as we move from a tile size which fits into the last-level
+  associative on-die cache, there is a drop in the effective bandwidth of the
+  SSTA solver.
 
-\fxnote{Say something about overall win/importance of tiling}
+%\subsection{Performance Comparison}
+%\label{sec:results:comparison}
 
-\subsection{Performance Comparison}
-\label{sec:results:comparison}
+%\begin{table}[h]
+%\centering
+%\caption{
+%  \textbf{SSTA and MKL Baseline Solver Comparison}: Comparison of the
+%    performance of the SSTA and MKL baseline solvers from the TSB suite.
+%  The SSTA solver is a substantial performance improvement over the MKL
+%    baseline.
+%  The results below use the \(ijk\)-layout for SSTA on Ivy Bridge and Haswell,
+%    and the \(ikj\)-layout on Knight's Landing.
+%  We measured STREAM Triad bandwidth between 49.74 GB/s and 49.86 GB/s on
+%    our Ivy Bridge system, between 60.36 GB/s and 60.44 GB/s on our Haswell
+%    system and between 418.2 GB/s and 419.6 GB/s on our Knight's Landing system.
+%  All measurements are 95\% confidence intervals constructed from the mean and
+%    sample standard deviation of multiple samples.
+%}
+%% FIXME: What does [t] here mean?
+%\begin{tabular}[t]{|c|c|c|} \hline
+%\textbf{Metric}     & \textbf{SSTA}    & \textbf{MKL} \\ \thickhline
+%% BW, Ivy Bridge SSTA ijk tw_sweep tw=8 results + sig figs 
+%% BW, Ivy Bridge MKL kji histogram tw=64 results + sig figs
+%% % STREAM, Ivy Bridge SSTA ijk histogram tw=8 results + sig figs
+%% % STREAM, Ivy Bridge MKL kji histogram tw=64 results + sig figs
+%\multicolumn{3}{c}{\rule{0pt}{2.25ex} Intel Ivy Bridge}          \\ \hline \thickhline
+%Effective BW [GB/s]   & \(44.0 \pm 0.07\) & \(22.49 \pm 0.003\)  \\ \hline 
+%\% of STREAM Triad BW & \(90 \pm 0.1\)    & \(45.2 \pm 0.05\)    \\ \hline
+%Speedup vs MKL        & \(\sim 2x\)       & \(1x\)               \\ \hline
+%\hline
+%% BW, Haswell SSTA ijk tw_sweep tw=8 results + sig figs 
+%% BW, Haswell MKL kji histogram tw=64 results + sig figs
+%% % STREAM, Haswell SSTA ijk histogram tw=8 results + sig figs
+%% % STREAM, Haswell MKL kji histogram tw=64 results + sig figs
+%\multicolumn{3}{c}{\rule{0pt}{2.25ex} Intel Haswell}             \\ \hline \thickhline
+%Effective BW [GB/s]   & \(54.3 \pm 0.01\)  & \(31.65 \pm 0.006\) \\ \hline 
+%\% of STREAM Triad BW & \(90.0 \pm 0.07\)  & \(52.4 \pm 0.04\)   \\ \hline
+%Speedup vs MKL        & \(\sim 1.7x\)      & \(1x\)              \\ \hline
+%\hline
+%% BW, Knight's Landing SSTA ikj tw_sweep tw=1 results + sig figs
+%% BW, Knight's Landing MKL kji histogram tw=64 results + sig figs
+%% % STREAM, Knight's Landing SSTA ikj histogram tw=1 results + sig figs
+%% % STREAM, Knight's Landing MKL kji histogram tw=64 results + sig figs
+%\multicolumn{3}{c}{\rule{0pt}{2.25ex} Intel Knight's Landing}    \\ \hline \thickhline
+%Effective BW [GB/s] & \(370 \pm 6\) & \(32 \pm 0.2\)             \\ \hline 
+%\% of STREAM Triad  & \(90 \pm 2\)  & \(7.6 \pm 0.04\)           \\ \hline
+%Speedup vs MKL      & \(\sim 12x\)  & \(1x\)                     \\ \hline
+%\end{tabular}
+%\label{tab:results:comparison}
+%\end{table}
 
-% Analysis of Prediction 1.1 (can outperform legacy solver)
-% Analysis of Prediction 1.2 (can efficiently utilize memory bandwidth)
+%SSTA was developed to replace an underperforming legacy solver in a production
+%  climate code.
+%The MKL baseline solver in the TSB suite proxies the performance of the
+%  production solver. 
+%Our results, summarized in Table~\ref{tab:results:comparison}, show that the
+%  SSTA solver delivers significantly better performance than the MKL baseline and
+%  should substantially improve the performance of the production code, in line
+%  with our predictions
 
-SSTA was developed to replace an underperforming legacy solver in a production
-  climate code.
-The MKL baseline solver in the TSB suite proxies the performance of the
-  production solver. 
-Our results, summarized in Table~\ref{tab:results:comparison}, show that the
-  SSTA solver delivers significantly better performance than the MKL baseline
-  and should substantially improve the performance of the production code.
-
-\fxnote{Say something about bigger win on KNL than Xeons. Say that we achieve
-90\% of STREAM Triad bandwidth on all platforms.}
-
-\begin{table}[h]
-\centering
-\caption{
-  \textbf{SSTA and MKL Baseline Solver Comparison}: Comparison of the
-    performance of the SSTA and MKL baseline solvers from the TSB suite.
-  The SSTA solver is a substantial performance improvement over the MKL
-    baseline.
-  The results below use the \(ijk\)-layout for SSTA on Ivy Bridge and Haswell,
-    and the \(ikj\)-layout on Knight's Landing.
-  We measured STREAM Triad bandwidth between 49.74 GB/s and 49.86 GB/s on
-    our Ivy Bridge system, between 60.36 GB/s and 60.44 GB/s on our Haswell
-    system and between 418.2 GB/s and 419.6 GB/s on our Knight's Landing system.
-  All measurements are 95\% confidence intervals constructed from the mean and
-    sample standard deviation of multiple samples.
-}
-% FIXME: What does [t] here mean?
-\begin{tabular}[t]{|c|c|c|} \hline
-\textbf{Metric}     & \textbf{SSTA}    & \textbf{MKL} \\ \thickhline
-% BW, Ivy Bridge SSTA ijk tw_sweep tw=8 results + sig figs 
-% BW, Ivy Bridge MKL kji histogram tw=64 results + sig figs
-% % STREAM, Ivy Bridge SSTA ijk histogram tw=8 results + sig figs
-% % STREAM, Ivy Bridge MKL kji histogram tw=64 results + sig figs
-\multicolumn{3}{c}{\rule{0pt}{2.25ex} Intel Ivy Bridge}          \\ \hline \thickhline
-Effective BW [GB/s]   & \(44.0 \pm 0.07\) & \(22.49 \pm 0.003\)  \\ \hline 
-\% of STREAM Triad BW & \(90 \pm 0.1\)    & \(45.2 \pm 0.05\)    \\ \hline
-Speedup vs MKL        & \(\sim 2x\)       & \(1x\)               \\ \hline
-\hline
-% BW, Haswell SSTA ijk tw_sweep tw=8 results + sig figs 
-% BW, Haswell MKL kji histogram tw=64 results + sig figs
-% % STREAM, Haswell SSTA ijk histogram tw=8 results + sig figs
-% % STREAM, Haswell MKL kji histogram tw=64 results + sig figs
-\multicolumn{3}{c}{\rule{0pt}{2.25ex} Intel Haswell}             \\ \hline \thickhline
-Effective BW [GB/s]   & \(54.3 \pm 0.01\)  & \(31.65 \pm 0.006\) \\ \hline 
-\% of STREAM Triad BW & \(90.0 \pm 0.07\)  & \(52.4 \pm 0.04\)   \\ \hline
-Speedup vs MKL        & \(\sim 1.7x\)      & \(1x\)              \\ \hline
-\hline
-% BW, Knight's Landing SSTA ikj tw_sweep tw=1 results + sig figs
-% BW, Knight's Landing MKL kji histogram tw=64 results + sig figs
-% % STREAM, Knight's Landing SSTA ikj histogram tw=1 results + sig figs
-% % STREAM, Knight's Landing MKL kji histogram tw=64 results + sig figs
-\multicolumn{3}{c}{\rule{0pt}{2.25ex} Intel Knight's Landing}    \\ \hline \thickhline
-Effective BW [GB/s] & \(370 \pm 6\) & \(32 \pm 0.2\)             \\ \hline 
-\% of STREAM Triad  & \(90 \pm 2\)  & \(7.6 \pm 0.04\)           \\ \hline
-Speedup vs MKL      & \(\sim 12x\)  & \(1x\)                     \\ \hline
-\end{tabular}
-\label{tab:results:comparison}
-\end{table}
-
-Our results strongly validate our initial hypothesis that we would be able to
-  outperform our MKL baseline solver and greatly improve utilization of available
-  memory bandwidth.
+%Our results strongly validate our initial hypothesis that we would be able to
+%  outperform our MKL baseline solver and greatly improve utilization of available
+%  memory bandwidth.
 
 %===========================================================================
 \section{Conclusion}
 \label{sec:conclusion}
 
-We have introduced an approach to maximize throughput and memory
-  performance of vectors of different small, tridiagonal matrix solves.
-These arise in a number of scientific application contexts, and could
-  be an important component of numerical linear algebra libraries.
-We have demonstrated that a number of trade-offs exist: between tile size,
-  data layout, vectorization features (division, reciprocal, etc.),
-  and constraints from the memory hierarchy.
-For pre-KNL architectures, we have shown some benefit from an iterative
-  single-precision inverse that reduces instruction latency for divides; 
-  for the KNL architecture that supports vectorized divides, 
-  there was little benefit.
-Across all architectures, the benefit in VTDMA was evident from 
-  memory bandwidth, with improvements over single-matrix MKL ranging 
-  from \fxnote{$XX\%$} of pin bandwidth for IVB and HSW to 
-  \fxnote{$XX\%$} on KNL.
-The sensitivity to tile size clearly showed that L1, L2, and TLB effects
-  need to be considered carefully when exploring the optimization space.
-Changing data layouts between natural \(ijk\) indices and \(kij\) 
-  or \(ikj\) made a substantial difference in performance, 
-  and it was determined that \(ikj\) provides the best 
-  \fxnote{$XX\%$} improvement.
-Overall, the difference between a naive loop and MKL implementation,
-  and one optimized for vectorization and memory hierarchy on KNL 
-  can be as much as \fxnote{$XX\%$}.
+% Analysis of Prediction 1.1 (can outperform legacy solver)
+% Analysis of Prediction 1.2 (can efficiently utilize memory bandwidth)
+
+We introduced the Simultaneous Streaming Thomas Algorithm (SSTA) solver, which
+  can solve many small tridiagonal matrix systems simultaneously, a
+  problem which arises in a number of scientific application domains.
+We have demonstrated the impact of different tiling schemes, total tile sizes
+  and data layouts, and how they interact with the memory subsystem.
+We showed how our simultaneous solver out performs a natural \(kji\)-layout
+  solver.
+A parameter sweep demonstrated the sensitivity of the SSTA solver to changes in
+  tile size and data layout.
+We found that the \(ijk\)-layout version of SSTA provides the best performance
+  on Xeon platforms with a total tile size that is small enough to fit into the
+  L3 cache capacity per processing-unit but is too large to fit in the L2 cache.
+On Knight's Landing, the \(ikj\)-layout yields the best performance with a
+  total tile size which is small enough to fit into the L2 cache capacity per
+  processing-unit
+
+We have shown that SSTA is a highly efficient solver capable of achieving 90\%
+  of STREAM Triad bandwidth on Intel Xeon and Xeon Phi systems, including the new
+  Knight's Landing microarchitecture.
+Our algorithm is a substantial improvement over the MKL-based legacy solver it
+  is designed to replace; it is \(\sim 2x\) faster on Xeon platforms and
+  \(\sim 12x\) faster on Knight's Landing.
 
 \section{Future Work}
 \label{sec:future_work}
 
-A number of possible research directions are possible from VTDMA.
+There are a number of future research directions we are interested in exploring
+  with the SSTA solver.
+
+There are a number of optimizations which we developed for the SSTA
+  solver but have not presented here as they have not delivered the performance
+  impact we hoped for.
+We developed two optimizations which reduced the number of floating point
+  divisions and/or reciprocal estimates that are performed by the SSTA solver. 
+The first, the \textbf{cached-divide} optimization, reformulates the Thomas 
+  algorithm to remove the division operation from the back substitution loop by
+  storing the reciprocal of the temporary value which is written to the array
+  \(b\) in the forward elimination loop instead of the temporary value itself.
+The second optimization is specific to Intel AVX and AVX2 systems like the Xeon
+  test platforms used in this paper.
+The AVX and AVX2 extensions provide a single-precision reciprocal instruction
+  (RCPPS) but no double precision reciprocal~\cite{intel_opt_manual}.
+We developed a vector double-precision division implementation,
+  \textbf{NR-RCPPS division}, which converts to single precision, performs an
+  RCPPS operation, converts back to double precision and then performs Newton
+  Raphson iterations.
+While we found both optimizations to be beneficial in serial, they decreased
+  performance if combined together and had little impact in parallel.
+We also experimented with a technique to mitigate cache aliasing
+  conflicts, but we were not able to distinguish a clear performance impact.
+
+The version of the TSB suite described in this paper uses what we refer to as
+  the \textbf{full-grid} scheme, where the tridiagonal matrix is built and stored
+  for all vertical columns and we do not include the construction of the matrix
+  in our measurements or performance model.
+The alternative, the \textbf{rolling-grid} scheme, builds the matrix on the fly
+  with a tile-sized, \lstinline{thread_local} \(a\), \(b\) and \(c\).
+In addition to offering storage savings, we believe the rolling-grid scheme
+  will further improve data locality and hardware prefetching performance as the
+  storage for the matrix will be the same for all tiles which each thread
+  executes.
+However, this technique requires building the matrix within the
+  OpenMP-parallelized tile loop which we time.
+Due to the short duration of each individual tile solve, it is not possible to
+  time each individually with our current timing mechanism.
+It is possible that we might be able to perform such timings with our other
+  timing mechanism, which utilized a hardware timestamp counter (e.g.
+  RDTSCP~\cite{intel_opt_manual}).
+Alternatively, we could incorporate the matrix build into our performance
+  model, although this would decrease the overall AI of SSTA.
+Further research is needed to explore smaller total tile sizes, as well as the
+  tile-\(ij\) scheme further as it may be beneficial to production applications
+  that are willing to accept some performance trade-off for increased flexibility
+  in the extent of the horizontal extent \(ni\).
+
+We would like to extend the range of hardware platforms and configurations in
+  future experiments.
+We have not yet fully investigated the utilization of hyper-threads with the
+  SSTA solver.
+Additionally, we have primarily used MCDRAM as a direct-mapped, hardware
+managed cache on Knight's Landing.
+Further effort is needed to study the trade-off between utilizing on-package,
+  high-bandwidth memory as a cache versus programmable memory which must be
+  allocated with a special interface.
+We are also interested in testing the SSTA solver on SIMT GPGPU
+  architectures.
+
+There are also a number of related numerical problems which we believe could be
+  addressed by some of the techniques we describe in this paper.
 The existing algorithm is directly applicable to block-tridiagonal matrices,
   where diagonal and off-diagonal blocks can be solved simultaneously
   to accelerate larger, distributed matrix solves.
-This would also be the basis for better strong scaling by tiling in
-  the vertical $k$ direction as well, and potentially smaller
-  tile sizes overall. 
+% Bryce: I'm hesitant to say anything about tiling \(k\) with a Thomas-algorithm
+% type solve, I just don't know enough about it. There are loop-carried dependencies
+% so I'm not sure you'll get anywhere producitivity 
+%This would also be the basis for better strong scaling by tiling in
+%  the vertical \(k\) direction as well, and potentially smaller
+%  tile sizes overall. 
 The current algorithm needs to be extended to include matrix assembly
   based on solution values, and put inside a fully non-linear iteration
-  with a Jacobian calculation, such as used in Newton iterations;
-  the challenge here is that some columns may converge faster than
+  with a Jacobian calculation, such as used in Newton iterations.
+The challenge here is that some vertical columns may converge faster than
   others, and vector masks or scalar iterative refinement may be required.
-Opportunities to extend the algorithm to banded matrices and ILU-type 
+Opportunities to extend the algorithm to banded matrices and incomplete LU-type 
   algorithms are straight-forward for diagonally-dominant cases, but
   pivoting has the potential to hinder vectorization if not carefully
   implemented.
-Finally, a more complex application would involve other operations,
-  such as traditional ``stencil'' finite difference operations and
-  time integration algorithms; it remains to be seen if there are
-  performance trade-offs between \(ijk\) and \(ikj\) in 
-  these applications.
-This is particularly important for unstructured mesh applications,
-  where mesh partitioning usually provide only \(ik\) 
-  data alignment to applications.
 
-\fxnote{Bryce: Sentence about rolling matrix?}
-
-% Need a section explaining tile size / tile storage size
-
-% Future work should mention smaller tile sizes.
+Finally, more complex applications integrate multiple solvers and
+  computationally phases, such as traditional ``stencil'' finite difference
+  operations and time integration algorithms. 
+It remains to be seen if there are
+  performance trade-offs between \(ijk\)-layout and \(ikj\) in these
+  applications.
+% Closer.
+Our efforts in the immediate future will revolve around integration of the SSTA
+  solver into our production software and research into those trade-offs.
 
 %===========================================================================
 %\section*{Acknowledgments}
@@ -1628,29 +1794,34 @@ This is particularly important for unstructured mesh applications,
 %\item Performance with 2,3,4 hyperthreads...  maybe just prose comments?
 %\item effect of kdim != pow(2)... maybe just prose comments?
 %\end{enumerate}
-\newpage
-\section*{TODO}
+%\newpage
+%\section*{TODO}
+%
+%\fxnote{from SAM: I think the paper/abstract should respond to a few points in 
+%their topics of interest...}
+%\begin{itemize}
+%\item Performance evaluation and lessons learnt \\
+%  == Early/First examination of KNL for climate codes
+%\item Extensions to and shortcomings of current accelerator directives APIs \\
+%  == some comment on observation that compilers are unable to see beyond OMP on
+%a column and realize a loop transformations (for vectorization) across multiple
+%columns can be performed.
+%\item Auto-tuning and optimization strategies \\
+%  == tuning tile sizes / caching divides / etc...
+%\end{itemize}
+%
+%\fxnote{HANS: Most of the length is due to two competing goals for the paper: 
+%  an optimization process, or a benchmark. Skip the benchmark for now \dots}
+%
+%\fxnote{SAM/HANS: is anything learned from single-core results here? Drop?}
+%
+%\fxnote{HANS: where is the discussion of how the B/W is calculated? 
+%  Where are the wallclock times?}
 
-\fxnote{from SAM: I think the paper/abstract should respond to a few points in 
-their topics of interest...}
-\begin{itemize}
-\item Performance evaluation and lessons learnt \\
-  == Early/First examination of KNL for climate codes
-\item Extensions to and shortcomings of current accelerator directives APIs \\
-  == some comment on observation that compilers are unable to see beyond OMP on
-a column and realize a loop transformations (for vectorization) across multiple
-columns can be performed.
-\item Auto-tuning and optimization strategies \\
-  == tuning tile sizes / caching divides / etc...
-\end{itemize}
 
-\fxnote{HANS: where is the discussion of how the B/W is calculated? 
-  Where are the wallclock times?}
-
-
-\begin{figure*}
-\listoffixmes
-\end{figure*}
+%\begin{figure*}
+%\listoffixmes
+%\end{figure*}
 
 \end{document}
 
