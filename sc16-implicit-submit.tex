@@ -1127,7 +1127,14 @@ Sources of \textbf{random observational error} include Work starvation and
   \begin{minipage}{0.49\textwidth}
     \centering
     \caption{
-      \textbf{Total Tile Size vs Effective Bandwidth (Ivy Bridge)} \fxnote{Lorem ipsum}
+      \textbf{Total Tile Size vs Effective Bandwidth (Ivy Bridge).}
+      Performance of the two variants of TSB, \(kij\)-layout MKL, plotted
+      against stream benchmark. Note that MKL achieves less than $1/2$ of
+      stream, while TSB approaches are similar and have ${\sim}90\%$ of stream 
+      performance until L3 effects can be seen. Prior to that, the 
+      \(ikj\) layout provides the best performance for small tile size,
+      which is an important factor for strong scaling.
+      \fxnote{Bryce: review?}
     }
     \label{fig:results:tile_size_ivb}
     \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
@@ -1135,7 +1142,9 @@ Sources of \textbf{random observational error} include Work starvation and
   \begin{minipage}{0.49\textwidth}
     \centering
     \caption{
-      \textbf{Total Tile Size vs Effective Bandwidth (Haswell):} \fxnote{Lorem ipsum}
+      \textbf{Total Tile Size vs Effective Bandwidth (Haswell):}
+      Similar to Figure \ref{fig:results:tile_size_ivb}. 
+      \fxnote{Bryce: review?}
     }
     \label{fig:results:tile_size_hsw}
     \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
@@ -1147,7 +1156,16 @@ Sources of \textbf{random observational error} include Work starvation and
   \begin{minipage}{0.49\textwidth}
     \centering
     \caption{
-      \textbf{Total Tile Size vs Effective Bandwidth (Knight's Landing):} \fxnote{Lorem ipsum}
+      \textbf{Total Tile Size vs Effective Bandwidth (Knight's Landing):}
+      Performance of the two variants of TSB, \(kij\)-layout MKL, plotted
+      against stream benchmark. Note that MKL achieves less 
+      than ${\sim}10\%$ of stream. The TSB approaches show different results: 
+      \(ikj\) shows best performance (${\sim}90\%$ of stream) for smallest
+      tile sizes that fit in L1 (strong scaling limit), 
+      whereas \(ijk\) performance is more consistent (but lower) 
+      and best for tiles that fit into L2. The better performance of 
+      \(ikj\) potentially due to KNL's long prefetch streaming performance.
+      \fxnote{Bryce: review?}
     }
     \label{fig:results:tile_size_knl}
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
@@ -1155,7 +1173,12 @@ Sources of \textbf{random observational error} include Work starvation and
   \begin{minipage}{0.49\textwidth}
     \centering
     \caption{
-      \textbf{\% of STREAM Triad Effective Bandwidth:} \fxnote{Lorem ipsum}
+      \textbf{\% of STREAM Triad Effective Bandwidth:}
+      Across the three architectures, the TSB algorithm with an optimal 
+      tiling size improves over an \(kij\) MKL approach, and achieves
+      ${\sim}90\%$ of stream. For KNL, the \(ikj\) layout change is responsible
+      for \({\sim}25\%\) of the achieved bandwidth.
+      \fxnote{Bryce: review?}
     }
     \label{fig:results:efficiency}
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_09_03_2016_09_04_2016_1socket.pdf}
