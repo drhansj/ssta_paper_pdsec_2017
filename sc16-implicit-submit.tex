@@ -277,12 +277,9 @@ Thus, because these are often non-linear matrix systems with space- and
   time-dependent entries, these applications may not use a 
   ``factor once, solve many times'' approach, which is often used 
   as a model matrix performance test.
-This prevents amortizing setup and factorization costs
-  across multiple right-hand side solves as in 
-  \lstinline{dgtsv()}~\cite{IntelMKL_DGTSV} and \lstinline{dgttrs()}~\cite{IntelMKL_DGTTRS},
-  and also challenges vectorization due to the odd size and
-  dissimilar entries of the matrices, as well as the 
-  memory access patterns relative to the bigger simulation data layout.
+This prevents amortizing setup and factorization costs across multiple
+  right-hand side solves as in \lstinline{dptsv()}, \lstinline{dtsvb()},
+  \lstinline{dgtsv()} and \lstinline{dgttrs()}~\cite{intel_mkl_manual}.
 In that case, it is usually sub-optimal on SIMD many-core or SIMT GPGPU
   architectures to simply call an optimized linear algebra library, 
   such as Intel's Math Kernel Library (MKL)~\cite{mkl_website} or NVIDIA's
