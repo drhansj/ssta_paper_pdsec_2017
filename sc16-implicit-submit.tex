@@ -63,6 +63,7 @@ xleftmargin=0.1cm,
 \usepackage{pdflscape}
 
 \captionsetup[subfigure]{position=top}
+\captionsetup[figure]{labelfont=bf}
 
 %\usepackage[font=scriptsize,justification=justified,singlelinecheck=false]{caption}
 
@@ -222,8 +223,8 @@ Unlike many vectorized or ``batched'' approaches that rely on reusing
   the case of sets of matrices that are different, due to
   spatial variation or non-linear solvers, for example.
 We evaluate the performance of the approach with a benchmark 
-  tridiagonal matrix solver that uses only OpenMP pragmas, tiling,
-  and memory layouts to optimize memory bandwidth.
+  tridiagonal matrix solver that uses only OpenMP and compiler directives,
+  tiling, and memory layouts to optimize memory bandwidth and vectorization.
 Performance is evaluated on Intel architectures with different cache,
   vectorization, and threading features (IVB, HSW, and KNL), 
   and compared to theoretical roofline models across parameter studies.
@@ -549,13 +550,13 @@ Each step of the algorithm is applied across an entire plane.
 For example, the forward sweep becomes:
 \begin{lstlisting}
 for (auto k = 1; k < nk; ++k)
-for (auto j = 0; j < nj; ++j)
-for (auto i = 0; i < ni; ++i) {
-  auto const m = a[i][j][k]
-               / b[i][j][k - 1];
-  b[i][j][k] -= m * c[i][j][k - 1];
-  u[i][j][k] -= m * u[i][j][k - 1];
-} 
+ for (auto j = 0; j < nj; ++j)
+  for (auto i = 0; i < ni; ++i) {
+    auto const m = a[i][j][k]
+                 / b[i][j][k - 1];
+    b[i][j][k] -= m * c[i][j][k - 1];
+    u[i][j][k] -= m * u[i][j][k - 1];
+  } 
 \end{lstlisting}
 This approach facilities both task-level parallelism and vectorization.
 The grid and block matrix can be tiled into smaller subgrids, and the Thomas
@@ -566,13 +567,6 @@ Each step of the Thomas algorithm can be vectorized across the \(ni \times nj\)
 For the SSTA solver, the horizontal dimension \(i\) is always the unit stride
   dimension, and the direction in which we vectorize.
 
-%\fxnote{TODO: Explain that the independent solve approach is what LAPACK does,
-%and that's why it is insufficient for this type of problem. Also, explain that
-%LAPACK has no routine for Thomas-style tridiagonal solves - dgtsv is
-%generalized, does actual Gaussian eliminiation and may do pivoting. Also
-%mention somewhere that MKL does not parallelize dgtsv.}
-
-%{\color{red} CUT REDUNDANT WITH INTRO \\
 The vector parallelism exposed by the simultaneous approach offers a major
   benefit over the independent approach, since it is not possible to vectorize
   most of the kernels in the independent approach due to data dependencies
@@ -583,7 +577,6 @@ The extent of the vertical dimension tends to be very small in the applications
   we are concerned with \(O(30-100)\).
 Vectorizing in the horizontal dimensions allows us to control locality and loop
   trip counts via tiling.
-%}
 
 \subsection{Data Layout}
 \label{sec:implementation:data_layout}
@@ -597,12 +590,6 @@ We have investigated three different schemes:
 \centering
 % NOTE: kji AKA column-major, Fortran, left
 % NOTE: ijk AKA row-major, C++, right
-%\caption{\textbf{Data Layouts for the 3D Cartesian Grid:} The following three
-%data layouts were investigated in the course of this research. The \(kji\)-layout
-%is optimal for the independent solve strategy. The \(ijk\)-layout is effective
-%for the simultaneous solve strategy, but the \(ikj\)-layout provides better
-%data locality (\S\ref{lab:tiling}) and out performs the \(ijk\)-layout on
-%Knight's Landing (Figure \ref{})}
 \caption{\textbf{Data Layouts for the 3D Cartesian Grid}}
 \begin{tabular}[t]{|c|c|c|c|} \hline
 \textbf{Name}         & \textbf{\(i\)-stride} & \textbf{\(j\)-stride} & \textbf{\(k\)-stride}   \\\cline{2-3}
@@ -623,7 +610,6 @@ Currently, the production codebase allocates a temporary gather buffer, copies
   data from the grid into the buffer, calls the LAPACK solver, and then copies
   the result from the buffer back to the grid.
 
-%{\color{red} CUT-MERGE LEARNINGS IN NEXT \S~\ref{sec:tiling} \\
 We have found the \(kji\)-layout to be optimal for our MKL baseline solver.
 With the \(kji\)-layout, we have contiguous vertical columns which can be
   passed to MKL without temporary allocations or unnecessary copies.
@@ -631,24 +617,15 @@ We observed a noticeable performance increase from this change with very
   little source code impact, although we have not studied the impact of this
   layout change on horizontal solver components.
 
-%Eventually, we determined that LAPACK would not be sufficient for the vertical
-%solves and that we could achieve substantially higher bandwidths by developing
-%the solver described in this paper, we revisited the data layout question. As
-%we would not be able to vectorize the Thomas algorithm in the vertical
-%dimension due to the the loop-carried dependencies present in the algorithm, we
-%decided to switch back to an \(ijk\) layout, where one horizontal dimension (\(i\))
-%is the unit stride dimension and the vertical dimension (\(k\)) has the greatest
-%stride.
-
 Our SSTA solver uses either the \(ijk\)- or \(ikj\)-layout.
 The SSTA algorithm vectorizes in one of the horizontal directions (as described
   in \S\ref{sec:implementation:batching_and_parallelism}), so it is desirable to
   use layouts where the horizontal dimension that we are vectorizing (\(i\)) is
   the unit stride dimension, avoiding strided vector loads.
-The \(ikj\) layout arose as an optimization to combat data locality and prefetching
-  issues which hindered performance on the Intel Xeon Phi Knight's Landing
-  architecture, and is described in greater detail in the following section.
-%}
+The \(ikj\) layout arose as an optimization to combat data locality and
+  prefetching issues which hindered performance on the Intel Xeon Phi Knight's
+  Landing architecture, and is described in greater detail in the following
+  section.
 
 \subsection{Tiling}
 \label{sec:implementation:tiling}
@@ -656,27 +633,13 @@ The \(ikj\) layout arose as an optimization to combat data locality and prefetch
 \begin{figure}[!bt]
   \centering
   \caption{
-    \textbf{Tile-\(j\) Scheme with the \(ijk\)-Layout:} 
-    Unit stride in \(i\) then \(j\) directions, creating a tile from an 
-    \(ni \times mj \times nk \) plane, where \(1 \le  mj \le nj \).
-    Note that memory is not contiguous in the \(k\) direction; 
-    colors indicate strides of $O(ni \times nj)$.
-    \fxnote{Bryce: review?}
-  }
-  \label{fig:implementation:tiling:ijk_layout_tile_j}
-  \includegraphics[width=0.70\columnwidth]{figures/ijk_layout_tile_j_scheme.pdf}
-  \vspace{-.5cm}
-\end{figure}
-
-\begin{figure}[!bt]
-  \centering
-  \caption{
-    \textbf{Tile-\(ij\) Scheme with the \(ijk\)-Layout:} 
-    Unit stride in \(i\) then \(j\) directions, creating a tile from an 
-    \(mi \times mj \times nk \) block, 
-    where \(1 \le  mi \le ni \) and \(1 \le  mj \le nj \).
-    Note that memory is not contiguous in \(k\) here as well.
-    \fxnote{Bryce: review?}
+    \textbf{Tile-\(ij\) Scheme with the \(ijk\)-Layout:}
+    Partitioning an \textbf{\(ijk\)-layout} grid into four tiles with the
+      \textbf{tile-\(ij\)} scheme produces \(ni/2 \times ni/2 \times nk\) tiles.
+    Each tile consists of \(nk \times ni/2\) contiguous \(i\)-lines (colored
+      below), each containing \(ni/2\) elements.
+    This layout and tiling combination exhibits the least contiguity out of the
+      four different options.
   }
   \label{fig:implementation:tiling:ijk_layout_tile_ij}
   \includegraphics[width=0.70\columnwidth]{figures/ijk_layout_tile_ij_scheme.pdf}
@@ -686,14 +649,16 @@ The \(ikj\) layout arose as an optimization to combat data locality and prefetch
 \begin{figure}[!bt]
   \centering
   \caption{
-    \textbf{Tile-\(j\) Scheme with the \(ikj\)-Layout:}
-    Unit stride in \(i\) then \(k\) directions, creating a tile from an 
-    \(ni \times mj \times nk \) block, where \(1 \le  mj \le nj \).
-    Note that memory is contiguous in the tile.
-    \fxnote{Bryce: review?}
+    \textbf{Tile-\(j\) Scheme with the \(ijk\)-Layout:}
+    Partitioning an \textbf{\(ijk\)-layout} grid into four tiles with the
+      \textbf{tile-\(j\)} scheme produces \(ni \times ni/4 \times nk\) tiles.
+    Each tile consists of \(nk\) contiguous \(ij\)-planes (colored
+      below), each containing \(ni^2/4\) elements.
+    This layout and tiling combination exhibits the best contiguity for the 
+      \(ijk\)-layout.
   }
-  \label{fig:implementation:tiling:ikj_layout_tile_j}
-  \includegraphics[width=0.70\columnwidth]{figures/ikj_layout_tile_j_scheme.pdf}
+  \label{fig:implementation:tiling:ijk_layout_tile_j}
+  \includegraphics[width=0.70\columnwidth]{figures/ijk_layout_tile_j_scheme.pdf}
   \vspace{-.5cm}
 \end{figure}
 
@@ -701,14 +666,30 @@ The \(ikj\) layout arose as an optimization to combat data locality and prefetch
   \centering
   \caption{
     \textbf{Tile-\(ij\) Scheme with the \(ikj\)-Layout:}
-    Unit stride in \(i\) then \(k\) directions, creating a tile from an 
-    \(mi \times mj \times nk \) block, where \(1 \le  mi \le ni \)
-    and \(1 \le  mj \le nj \).
-    Note that memory is contiguous in planes, but strided by $O(ni \times nk)$.
-    \fxnote{Bryce: review?}
+    Partitioning an \textbf{\(ikj\)-layout} grid into four tiles with the
+      \textbf{tile-\(ij\)} scheme produces \(ni/2 \times ni/2 \times nk\) tiles.
+    Each tile consists of \(ni/2\) contiguous \(ik\)-planes (colored
+      below), each containing \(nk \times ni/2\) elements.
+    This layout and tiling combination typically exhibits greater contiguity
+      than either \(ijk\)-layout tiling scheme.
   }
   \label{fig:implementation:tiling:ikj_layout_tile_ij}
   \includegraphics[width=0.70\columnwidth]{figures/ikj_layout_tile_ij_scheme.pdf}
+  \vspace{-.5cm}
+\end{figure}
+
+\begin{figure}[!bt]
+  \centering
+  \caption{
+    \textbf{Tile-\(j\) Scheme with the \(ikj\)-Layout:}
+    Partitioning an \textbf{\(ikj\)-layout} grid into four tiles with the
+      \textbf{tile-\(j\)} scheme produces \(ni \times ni/4 \times nk\) tiles.
+    Each tile is one contiguous region containing \(nk \times ni^2/4\) elements.
+    This layout and tiling combination exhibits the greatest contiguity out of
+      the four different options.
+  }
+  \label{fig:implementation:tiling:ikj_layout_tile_j}
+  \includegraphics[width=0.70\columnwidth]{figures/ikj_layout_tile_j_scheme.pdf}
   \vspace{-.5cm}
 \end{figure}
 
@@ -758,13 +739,10 @@ Because it is necessary for all four arrays to remain in the cache hierarchy,
 The total tile size is the amount of data we need to remain in cache in between
   the forward elimination and back substitution loops.
 
-\fxnote{Use total tile size/per-array tile size from this point forward}
-
 Due to the loop-carried dependencies in the Thomas algorithm and the small
   extent of \(nk\), we could not tile the vertical dimension. So, we explored two
   tiling schemes which partition the horizontal space.
 
-%{\color{red} CUT MOST OF DISCUSSION, JUST STATE OPTIONS \\
 The \textbf{tile-\(ij\)} scheme partitions both the \(i\) and \(j\) dimensions,
   yielding tiles with arbitrary horizontal shape. 
 The \textbf{tile-\(j\)} scheme partitions only the \(j\) dimension, producing
@@ -779,9 +757,11 @@ For example, suppose we partition an \(ijk\)-layout grid into four tiles with
 Both tiles have the same size, \(nk \times ni^2/4\) elements.
 However, the tile-\(j\) scheme has much greater data contiguity.
 For the tile-\(ij\) scheme, tiles contain are \(nk \times ni/2\) contiguous
-  \(i\)-lines, each containing \(ni/2\) elements.
+  \(i\)-lines, each containing \(ni/2\) elements
+  (Figure~\ref{fig:implementation:tiling:ijk_layout_tile_ij}).
 For the tile-\(j\) scheme, tiles contain are \(nk\) contiguous \(ij\)-planes,
-  each containing \(ni^2/4\) elements.
+  each containing \(ni^2/4\) elements
+  (Figure~\ref{fig:implementation:tiling:ijk_layout_tile_j}).
 
 While the tile-\(j\) scheme offers greater contiguity than the
   tile-\(ij\) in this example, the tile-\(j\) tiles are not a single contiguous
@@ -799,15 +779,11 @@ Additionally, the tile-\(j\) tiles are completely contiguous regions of memory,
 
 Consider switching to the \(ikj\)-layout in the prior example.
 The tile-\(ij\) tiles would contain \(ni/2\) contiguous \(ik\)-planes, each
-  containing \(nk \times ni/2\) elements.
+  containing \(nk \times ni/2\) elements
+  (Figure~\ref{fig:implementation:tiling:ikj_layout_tile_ij}).
 The tile-\(j\) tiles would be one contiguous region containing
-  \(nk \times ni^2/4\) elements.
-
-%We have observed that the greater contiguity of the tile-\(j\) approach leads
-%  to fewer strided memory accesses, improved hardware prefetching and fewer
-%  translation lookaside buffer (TLB) entries needed per tile (discussed in
-%  \S\ref{results} and shown in Figure \ref{ref:results:tile_size_knl} and
-%  \ref{ref:results:efficiency}).
+  \(nk \times ni^2/4\) elements
+  (Figure~\ref{fig:implementation:tiling:ikj_layout_tile_j}).
 
 The only notable downside to the tile-\(j\) scheme is the loss of
   flexibility in tile sizes.
@@ -829,146 +805,38 @@ The tile-\(j\) scheme is used with both layouts.
 We developed the Tridiagonal Solve Benchmarks (TSB) suite during the course of
   the research described in this paper~\cite{tsb_git}.
 The TSB suite is freely available on Github under the Boost Software License,
-  version 1.0.
-Revision \fxnote{WHATEVER} contains the source code used for the experiments in
-  this paper.
+  version 1.0~\cite{boost_license}.
+Git tag \lstinline{ssta_paper_09_2016} contains the source code used for the
+  experiments in this paper.
 The benchmark suite has three major components: a multi-dimensional array
   abstraction, generic solver components and a test harness.
 
 \subsection{Test Problem}
 \label{sec:experimental_setup:test_problem}
 
-%{\color{red} REPLACE WITH EXACT MATRIX / STENCIL \\
-The benchmarks in TSB are based on solving, in each vertical column,
-  a matrix derived from a simple finite difference stencil 
-  for an ``implicit Euler'' time step of the diffusion equation,
-  with a $u=0$ boundary condition.
-For a dimensionless diffusion coefficient \(D > 0\), this
-  produces a \emph{diagonally-dominant} tridiagonal matrix:
+The benchmarks in TSB solves a matrix derived from a simple implicit Backward
+  Time, Centered Space (BTCS) finite difference stencil with Dirichlet boundary
+  conditions in each vertical column every time step.
+The \emph{diagonally-dominant} tridiagonal matrix takes the following form,
+  where \(D\) is a dimensionless diffusion coefficient (\(D > 0\)), \(\Delta t\)
+  is the time step size, \(\Delta k\) is the grid spacing and
+  \(r=D \Delta t / \Delta k\):
 \begin{align*}
 A = 
 \begin{bmatrix}
-1 + 3D & -D &     &          & 0        \\
--D & 1 + 2D & -D &          &          \\
-    & ...& ...    & ...     &              \\
-    &         & -D & 1 + 2D     & -D \\
-0   &     &     & -D & 1 + 3D
+1   & 0      &     &        & 0  \\
+-r  & 1 - 2r & -r  &        &    \\
+    & ...    & ... & ...    &    \\
+    &        & -r  & 1 - 2r & -r \\
+0   &        &     & 0      & 1
 \end{bmatrix}  
 \end{align*}
 An identical form of the problem is initialized in every vertical column of the
   3D grid, but the matrices are initialized every time.
-%}
-
-%{\color{red} THIS SHOULD BE MOVED UP INTO TILING /INTRO SECTION \\
-%Square and cubic problems tend to have limited flexibility in how they can be
-%decomposed into equally-sized chunks of work, which can be problematic for a
-%benchmark where we wish to explore different degrees of parallelism and
-%different tile sizes. Because the horizontal (ij) shape of the 3D grid in TSB
-%has little significance, we decided to prefer a long rectangular grid, with
-%fixed and small i and k extents and a long, variable j extent.
-
-%It should be noted that the horizontal shape of the grid is not entirely
-%arbitrary for NAMEFORALGO. In the tile-j scheme that we use, the extent of i controls the
-%lower bound on the tile size and completely controls the loop trip count for
-%the inner-most unit-stride loop. We cannot use the vertical extent as a
-%tile-size control because the number of vertical levels is largely determined
-%by the physics of the production code.
-%}
-
-%\subsection{Constant Parameters}
-%\label{sec:experimental_setup:constant_parameters}
-%
-%%{\color{red} CONVERT TO SMALL TABLE IN APPENDIX \\
-%We held most of the parameters of the test problem constant when producing the
-%results presented in this paper. A summary of the constant parameters and the
-%rationale behind their value follows.
-%
-%\begin{itemize}
-%\item Double precision data types were used for all results. 
-%\item The vertical extent nk and the horizontal extent ni were both set to 32
-%elements. We wanted to pick a power of 2 for the dimension that we would be
-%holding constant, so that we could ensure we would observe cache aliasing
-%conflicts when we picked a power of 2 for nj. For nk, we believe 32 elements is
-%a reasonable lower bound for the number of vertical levels that would be used
-%in our production climate code. The production codebase currently uses boxes
-%with horizontal extents which are somewhat greater than 32 (\(O(64-256)\)).
-%However, since $ni$ dictates the minimum tile size in our tile-j scheme, we
-%wanted to pick a smaller quantity to ensure that we were able to full explore
-%the space of possible tile sizes. 
-%\item The horizontal extent $nj$ was set to \(2^14*3^2=147456\). Our target Ivy
-%Bridge platform (see Table \ref{tab:test_platforms}) has 12 processing units
-%per socket, so it was necessary to ensure that nj was divisible by 3 so that we
-%would have an even, static division of work among processing units after
-%tiling. With ni and nk set as 32, this gives a \textbf{problem size} of ~4.429
-%GB (e.g. the sum of the size of the four arrays a, b, c and u). Recall that we
-%allocate nixnjxnk instead of nixnjx(nk-1) elements for the diagonal a and c to
-%simplify our cache aliasing conflict mitigation approach. So, the
-%\textbf{storage size} size is actually 4.5 GB (not including padding elements
-%for cache aliasing conflict mitigation).
-%\item The number of time steps (ns) was set to 4 per processing unit. For
-%example, running on 1 processing unit on our Knight's Landing platform, the
-%number of time steps would be set to 4. Running on all 64 processing units, the
-%number of time steps would be set to 256. This was done to ensure that runs
-%using different numbers of processing units would execute in roughly the same
-%amount of time without varying the problem size (e.g. fixed \textbf{problem
-%size} but varying \textbf{total work}).
-%\item The diffusion coefficient (D) in the test problem was set to 0.1 and the
-%frequency of the sine wave (N) in the initial conditions was set to 1. The
-%timestep size was set to 1e-7.
-%\item ArrayBaseAlign was set to 1MB. On our Ivy Bridge and Haswell platforms,
-%ArrayAlignStep was computed as 9216 bytes and PlanePadding was computed as 1152
-%bytes. On our Knight's Landing platform, ArrayAlignStep was computed as 17408
-%bytes and PlanePadding was computed as 2176 bytes. The plane padding storage
-%overhead (\(nz*PlanePadding\)) on Ivy Bridge/Haswell was 36KB. On Knight's
-%Landing it was 68KB.
-%\end{itemize}
-%%}
-%
-%The independent variables in our experiments were tile size (controlled by tile
-%width), number of processing units (discussed below in Section \ref{}) and
-%solver variant. The next section discusses the different solver strategies
-%available in TSB, a subset of which were used in the experiments described in
-%this paper.
-%
-%%{\color{red} CONVERT TO TABLE IN APPENDIX \\
-%\subsection{TSB Variants}
-%\label{sec:experimental_setup:tsb_variants}
-%
-%\begin{table*}%[t]
-%\centering
-%\caption{\textbf{Characterstics of the Tridiagonal Solve Benchmarks (TSB):}}
-%%* for simultanous refers to the "merged" approach which can't be parallelized right now because
-%\begin{tabular}{|c|c|c|c|} \hline
-%\textbf{Characterstic}       & \textbf{Options}                                     \\ \hline
-%Matrix Solver Family         & LAPACK, SSTA                                         \\ \hline
-%Batching Strategy            & Independent (LAPACK), Simultaneous (SSTA, LAPACK*)   \\ \hline
-%Floating Point Precision     & Single, Double (LAPACK, SSTA)                        \\ \hline 
-%Layout                       & kji (LAPACK), ijk (SSTA, LAPACK), ikj (SSTA)         \\ \hline
-%Tiling Scheme                & Tile J (SSTA, LAPACK), Tile IJ (SSTA*, LAPACK*)      \\ \hline
-%Grid Type                    & Full, Rolling (SSTA, LAPACK)                         \\ \hline
-%Parallel Programming Model   & OpenMP (SSTA, LAPACK), HPX (SSTA*)                   \\ \hline
-%Thomas Algorithm Formulation & Repeated Divide, Cached Divide (SSTA)                \\ \hline
-%Division Mechanism           & C++ Operator (SSTA, LAPACK), RCPPS w/ NR (SSTA)      \\ \hline
-%\end{tabular}
-%\label{tab:tsb_variant_characterstics}
-%\end{table*}
-%
-%The TSB suite contains variants of two different families of tridiagonal matrix
-%solvers: LAPACK-based variants which solve each vertical column independently, and
-%NAMFORALGO variants. The distinguishing characteristics of the variants are
-%listed in Table \ref{tab:tsb_variant_characterstics}. Each specific variant is
-%instantiated by combining different generic building blocks within the TSB
-%codebase; code which is shared by different variants is not duplicated.
-%
-%The list of possible variant instantiations is long and combinatoric in nature;
-%we omit it for brevity, as the description of distinguishing characteristic is
-%sufficiently descriptive.
-%%}
 
 \subsection{Hardware Platforms}
 \label{sec:experimental_setup:hardware_platforms}
 
-%{\color{red} MOVE TO APPENDIX/README \\
 %\begin{table*}[t]
 %\centering
 %\caption{\textbf{Test Platforms:}}
@@ -1077,15 +945,16 @@ To measure solver execution time, we average the wall-clock execution time of
 We measure OpenMP parallelization, e.g. we time the \lstinline{#pragma omp for}
   loop instead of measuring the duration of each iteration individually.
 Thus, parallel overheads are included in our recorded execution times.
-Timing measurements are recorded using \lstinline{std::chrono::steady\_clock},
+Timing measurements are recorded using \lstinline{std::chrono::steady_clock},
   which uses a system clock with is monotonically
-  increasing~\cite{cpp14_standard_chrono_steady_clock}
-  \fxnote{Bryce: fix this reference?}.
-On the three platforms we ran on, \lstinline{std::chrono::steady\_clock} has
+  increasing~\cite{cxx14}.
+On the three platforms we ran on, \lstinline{std::chrono::steady_clock} has
   nanosecond resolution.
 
 We performed each individual experiment multiple times on different nodes on
   our test systems.
+Sample sizes varied between experiments and platforms, but usually exceeded
+  100s of samples and represented \(\sim\) 24 hours of wall-clock time. 
 We estimated variance (e.g. random observational error) between \emph{different
   executions of the benchmark with identical parameters} by computing sample
   standard deviation.
@@ -1094,6 +963,12 @@ All measurements presented are \textbf{95\% confidence intervals} constructed
 Graphical visualizations display confidence bars for Knight's Landing results.
 The magnitude of the confidence intervals for Ivy Bridge and Haswell results is
   so small that it is not feasible to visualize them.~\cite{benchmarking_cpp_code}
+
+We used STREAM~\cite{stream} Triad results as an reference for peak effective
+  bandwidth.
+We measured STREAM Triad bandwidth between 49.74 GB/s and 49.86 GB/s on our Ivy
+  Bridge system, between 60.36 GB/s and 60.44 GB/s on our Haswell system and
+  between 418.2 GB/s and 419.6 GB/s on our Knight's Landing system.
 
 We believe there are two potential sources of non-trivial \textbf{systemic
   observational error} in our results.
@@ -1115,79 +990,114 @@ Sources of \textbf{random observational error} include Work starvation and
   varying performance of the memory subsystem due to system variance and OS
   noise.
 
-% Can't time the execution of each individual tile; The timing overheads become
-% too great and cause substantial systemic experimental error.
-
 %===========================================================================
 \section{Results}
 \label{sec:results}
 
 \begin{figure*}[!bth]
-  \captionsetup{width=0.39\textwidth}
   \centering
+  \caption{
+    \textbf{Total Tile Size vs Effective Bandwidth:}
+    The results of a parameter sweep on our two Intel Xeon platforms
+      demonstrating the effect of total tile size on the performance of the
+      SSTA solver is shown below (MKL baseline and STREAM Triad results shown as
+      lower- and upper-bounds).
+    For the \(ijk\)-layout, the optimal tile size, 256KB, is too large to fit
+      within the L2 cache.
+    Smaller tile sizes perform poorly for this layout because data contiguity
+      decreases with the tile size, incurring TLB and hardware prefetching
+      penalties.
+    The optimal tile size for the \(ikj\)-layout is 32KB, which fits in the L2. 
+    The \(ikj\)-layout, which exhibits better contiguity and memory access
+      patterns, performs better at smaller tile sizes, although the best
+      \(ikj\)-layout result does not outperform the best \(ijk\)-layout result
+      on these platforms.
+    Performance degrades for tile sizes which exceed L3 capacity.
+    Both SSTA variants substantially outperform the MKL baseline results and 
+      reach \(\sim\) 90\% of STREAM Triad effective bandwidth with optimal 
+      tile sizes.
+    All measurements are averages of a statistically significant number of
+      samples; confidence intervals are not visible due to their small magnitude.
+  }
+  \label{fig:results:tile_size_xeon}
+  \vspace{1em}
+%  \captionsetup{width=0.39\textwidth}
   \begin{minipage}{0.49\textwidth}
-    \centering
-    \caption{
-      \textbf{Total Tile Size vs Effective Bandwidth (Ivy Bridge).}
-      Performance of the two variants of TSB, \(kij\)-layout MKL, plotted
-      against stream benchmark. Note that MKL achieves less than $1/2$ of
-      stream, while TSB approaches are similar and have ${\sim}90\%$ of stream 
-      performance until L3 effects can be seen. Prior to that, the 
-      \(ikj\) layout provides the best performance for small tile size,
-      which is an important factor for strong scaling.
-      \fxnote{Bryce: review?}
+%    \centering
+%    \caption{
+%      \textbf{Ivy Bridge}
+%    }
+    \subfloat[
+      Ivy Bridge
+    ]{        
+      \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
+      \label{fig:results:tile_size_ivb}
     }
-    \label{fig:results:tile_size_ivb}
-    \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
-    \label{fig:results:tile_size_ivb}
   \end{minipage}
   \begin{minipage}{0.49\textwidth}
-    \centering
-    \caption{
-      \textbf{Total Tile Size vs Effective Bandwidth (Haswell):}
-      Similar to Figure \ref{fig:results:tile_size_ivb}. 
-      \fxnote{Bryce: review?}
+    \subfloat[
+      Haswell
+    ]{
+      \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
+      \label{fig:results:tile_size_hsw}
     }
-    \label{fig:results:tile_size_hsw}
-    \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
   \end{minipage}
 \end{figure*}
 
-\begin{figure*}[!bth]
-  \captionsetup{width=0.39\textwidth}
-  \begin{minipage}{0.49\textwidth}
+\begin{figure}[!h]
+%  \captionsetup{width=0.39\textwidth}
+%  \begin{minipage}{0.49\textwidth}
     \centering
     \caption{
       \textbf{Total Tile Size vs Effective Bandwidth (Knight's Landing):}
-      Performance of the two variants of TSB, \(kij\)-layout MKL, plotted
-      against stream benchmark. Note that MKL achieves less 
-      than ${\sim}10\%$ of stream. The TSB approaches show different results: 
-      \(ikj\) shows best performance (${\sim}90\%$ of stream) for smallest
-      tile sizes that fit in L1 (strong scaling limit), 
-      whereas \(ijk\) performance is more consistent (but lower) 
-      and best for tiles that fit into L2. The better performance of 
-      \(ikj\) potentially due to KNL's long prefetch streaming performance.
-      \fxnote{Bryce: review?}
+      Shown below are the results of a parameter sweep on our Intel Xeon Phi
+        Knight's Landing platform showing the effect of data layout and total
+        tile size on the performance of the SSTA solver.
+      MKL baseline (lower-bound) and STREAM Triad (upper-bound) results are shown
+        for reference.
+      The optimal tile size for the \(ijk\)-layout is 128KB, and the optimal
+        tile size for the \(ikj\)-layout is 32KB.
+      Both will fits in L2.
+      \(ijk\)-layout performance is hampered by poor data contiguity which incurs
+        \emph{expensive} TLB and hardware prefetching penalties on Knight's
+        Landing.
+      This effect is amplified at smaller tile sizes.
+      The best \(ikj\)-layout result has between 91 GB/s and 109 GB/s higher
+        effective bandwidth than the best \(ijk\)-layout result, and reaches
+        between 88\% and 92\% of STREAM Triad performance.
+      The \(ikj\) is a \(12x\) speedup and the \(ijk\)-layout is a \(9x\)
+        speedup over the MKL solver.
+%      All measurements are averages of a statistically significant number of
+%        samples; 95\% confidence intervals are shown, although some are not
+%        visible due to their small magnitude.
     }
     \label{fig:results:tile_size_knl}
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
-    \label{fig:results:tile_size_knl}
-  \end{minipage}
-  \begin{minipage}{0.49\textwidth}
+%  \end{minipage}
+%  \begin{minipage}{0.49\textwidth}
+\end{figure}
+
+\begin{figure}[!h]
     \centering
     \caption{
-      \textbf{\% of STREAM Triad Effective Bandwidth:}
-      Across the three architectures, the TSB algorithm with an optimal 
-      tiling size improves over an \(kij\) MKL approach, and achieves
-      ${\sim}90\%$ of stream. For KNL, the \(ikj\) layout change is responsible
-      for \({\sim}25\%\) of the achieved bandwidth.
-      \fxnote{Bryce: review?}
+      \textbf{Percentage of STREAM Triad Effective Bandwidth:}
+      Across all three microarchitectures, the SSTA solver with an optimal tile
+        size improves performance substantially over the MKL baseline, and
+        achieves \(\sim\) 90\% of STREAM Triad effective bandwidth.
+      Although untiled SSTA results beat the MKL solver, tiling contributes
+        significantly to overall performance: between 35.9\% and 36.1\% on 
+        Ivy Bridge, 34.22\% and 35.38\% on Haswell and 24\% and 26\% on 
+        Knight's Landing.
+      Between 21\% and 25\% of STREAM performance is attributed to the switch to
+        the \(ikj\)-layout on Knight's Landing. 
+%      All measurements are averages of a statistically significant number of
+%        samples; 95\% confidence intervals are shown, although some are not
+%        visible due to their small magnitude.
     }
     \label{fig:results:efficiency}
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_09_03_2016_09_04_2016_1socket.pdf}
-    \label{fig:results:efficiency}
-  \end{minipage}
-\end{figure*}
+%  \end{minipage}
+\end{figure}
 
 % Hypothesis 1.1: SSTA can outperform legacy solver
 % Hypothesis 1.2: SSTA can efficiently utilize memory bandwidth 
@@ -1222,8 +1132,38 @@ The first step was to determine the \textbf{optimal total tile size} for the
 \begin{table*}[t]
   \centering
   \caption{
-    \textbf{Performance Comparison of SSTA and MKL Solvers:} \fxnote{Lorem ipsum}
+    % AKA supertable
+    \textbf{Summary of SSTA Performance Results:} 
+    Optimal tile sizes, effective bandwidth, percentage of STREAM Triad performance
+      attained and speedup over the MKL baseline solver are given below for all
+      SSTA experiments.
+    The optimal tile size for the \(ijk\)-layout is large enough to fit within
+      in the last-level associative on-die cache on all platforms.
+    The optimal tile size for the \(ikj\)-layout, which exhibits greater data
+      contiguity, is smaller and will fit in the L2 on all platforms.
+    \(\sim\) 90\% of STREAM Triad effective bandwidth is obtained on all
+      platforms.
+    On the Xeon platforms, the SSTA solver is a \(\sim 2x\) speedup over the 
+      MKL baseline; on Knight's Landing it is a \(\sim 12x\) speedup.  
+    All measurements are averages of a statistically significant number of
+      samples and are reported with 95\% confidence. 
+%        visible due to their small magnitude.
+%  \textbf{SSTA and MKL Baseline Solver Comparison}: Comparison of the
+%    performance of the SSTA and MKL baseline solvers from the TSB suite.
+%  The SSTA solver is a substantial performance improvement over the MKL
+%    baseline.
+%  The results below use the \(ijk\)-layout for SSTA on Ivy Bridge and Haswell,
+%    and the \(ikj\)-layout on Knight's Landing.
+%  We measured STREAM Triad bandwidth between 49.74 GB/s and 49.86 GB/s on
+%    our Ivy Bridge system, between 60.36 GB/s and 60.44 GB/s on our Haswell
+%    system and between 418.2 GB/s and 419.6 GB/s on our Knight's Landing system.
+%  All measurements are 95\% confidence intervals constructed from the mean and
+%    sample standard deviation of multiple samples.
+%  We measured STREAM Triad bandwidth between 49.74 GB/s and 49.86 GB/s on
+%    our Ivy Bridge system, between 60.36 GB/s and 60.44 GB/s on our Haswell
+%    system and between 418.2 GB/s and 419.6 GB/s on our Knight's Landing system.
   }
+  \vspace{1em}
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   \begin{tabular}{|l|r|r|r|r|}\hline
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1243,35 +1183,35 @@ The first step was to determine the \textbf{optimal total tile size} for the
     \multicolumn{5}{c}{\rule{0pt}{2.25ex} \textbf{Ivy Bridge}} \\ \hline \thickhline
     % BW, Ivy Bridge MKL kji tw_sweep tw=64 results + sig figs
     % % STREAM, Ivy Bridge MKL kji histogram tw=64 results + sig figs
-    MKL \(kji\)-layout  &   Any &\(22.49 \pm 0.003\)&\(45.2 \pm 0.05\)& \(1x\) \\ \hline
+    MKL \(kji\)-layout  &   Any &\(22.49 \pm 0.003\) GB/s&\(45.2 \pm 0.05\) \%& \(1x\) \\ \hline
     % BW, Ivy Bridge SSTA ijk tw_sweep tw=8 results + sig figs 
     % % STREAM, Ivy Bridge SSTA ijk histogram tw=8 results + sig figs
-    SSTA \(ijk\)-layout & 256 KB &\(44.0 \pm 0.07\)&\(90 \pm 0.1\)& \(\sim 2x\) \\ \hline
+    SSTA \(ijk\)-layout & 256 KB &\(44.0 \pm 0.07\) GB/s&\(90 \pm 0.1\) \%& \(\sim 2x\) \\ \hline
     % BW, Ivy Bridge SSTA ikj tw_sweep tw=1 results + sig figs 
     % % STREAM, Ivy Bridge SSTA ijk PAPER tw=1 results + sig figs
-    SSTA \(ikj\)-layout &  32 KB &\(43.0 \pm 0.07\)&\(87 \pm 0.2\)& \(\sim 1.9x\) \\ \hline
+    SSTA \(ikj\)-layout &  32 KB &\(43.0 \pm 0.07\) GB/s&\(87 \pm 0.2\) \%& \(\sim 1.9x\) \\ \hline
     
     \multicolumn{5}{c}{\rule{0pt}{2.25ex} \textbf{Haswell}} \\ \hline \thickhline
     % BW, Haswell MKL kji tw_sweep tw=64 results + sig figs
     % % STREAM, Haswell MKL kji histogram tw=64 results + sig figs
-    MKL \(kji\)-layout  &   Any &\(31.65 \pm 0.006\)&\(52.4 \pm 0.04\)& \(1x\) \\ \hline
+    MKL \(kji\)-layout  &   Any &\(31.65 \pm 0.006\) GB/s&\(52.4 \pm 0.04\) \%& \(1x\) \\ \hline
     % BW, Haswell SSTA ijk tw_sweep tw=8 results + sig figs 
     % % STREAM, Haswell SSTA ijk histogram tw=8 results + sig figs
-    SSTA \(ijk\)-layout & 256KB &\(54.3 \pm 0.01\)&\(90.0 \pm 0.07\)& \(\sim 1.7x\) \\ \hline
+    SSTA \(ijk\)-layout & 256KB &\(54.3 \pm 0.01\) GB/s&\(90.0 \pm 0.07\) \%& \(\sim 1.7x\) \\ \hline
     % BW, Haswell SSTA ikj tw_sweep tw=1 results + sig figs 
     % % STREAM, Haswell SSTA ijk PAPER tw=8 results + sig figs
-    SSTA \(ikj\)-layout &  32KB &\(54.2 \pm 0.01\)&\(89.7 \pm 0.06\)& \(\sim 1.7x\)\\ \hline
+    SSTA \(ikj\)-layout &  32KB &\(54.2 \pm 0.01\) GB/s&\(89.7 \pm 0.06\) \%& \(\sim 1.7x\)\\ \hline
 
     \multicolumn{5}{c}{\rule{0pt}{2.25ex} \textbf{Knight's Landing}} \\ \hline \thickhline
     % BW, Knight's Landing MKL kji tw_sweep tw=64 results + sig figs
     % % STREAM, Knight's Landing MKL kji histogram tw=64 results + sig figs
-    MKL \(kji\)-layout  &   Any &\(32 \pm 0.2\)&\(7.6 \pm 0.04\)& \(1x\) \\ \hline
+    MKL \(kji\)-layout  &   Any &\(32 \pm 0.2\) GB/s&\(7.6 \pm 0.04\) \%& \(1x\) \\ \hline
     % BW, Knight's Landing SSTA ijk tw_sweep tw=4 results + sig figs
     % % STREAM, Knight's Landing SSTA ijk histogram tw=4 results + sig figs
-    SSTA \(ijk\)-layout & 128KB &\(280 \pm 5\)&\(66 \pm 1\)& \\ \hline
+    SSTA \(ijk\)-layout & 128KB &\(280 \pm 5\) GB/s&\(66 \pm 1\) \%& \(sim 9x\) \\ \hline
     % BW, Knight's Landing SSTA ikj tw_sweep tw=1 results + sig figs
     % % STREAM, Knight's Landing SSTA ikj histogram tw=1 results + sig figs
-    SSTA \(ikj\)-layout &  32KB &\(370 \pm 6\)&\(90 \pm 2\)& \(\sim 12x\) \\ \hline
+    SSTA \(ikj\)-layout &  32KB &\(370 \pm 6\) GB/s&\(90 \pm 2\) \%& \(\sim 12x\) \\ \hline
   \end{tabular}
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   \label{tab:results:comparison}
