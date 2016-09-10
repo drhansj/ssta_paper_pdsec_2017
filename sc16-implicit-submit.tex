@@ -676,7 +676,7 @@ The \(ikj\) layout arose as an optimization to combat data locality and prefetch
     Note that memory is not contiguous in \(k\) here as well.
     \fxnote{Bryce: review?}
   }
-  \label{fig:implementation:tiling:ijk_layout_tile_j}
+  \label{fig:implementation:tiling:ijk_layout_tile_ij}
   \includegraphics[width=0.70\columnwidth]{figures/ijk_layout_tile_ij_scheme.pdf}
   \vspace{-.5cm}
 \end{figure}
@@ -698,14 +698,14 @@ The \(ikj\) layout arose as an optimization to combat data locality and prefetch
 \begin{figure}[!bt]
   \centering
   \caption{
-    \textbf{Tile-\(ij\) Scheme with the \(ikj\)-Layout:} \fxnote{Lorem Ipsum}
+    \textbf{Tile-\(ij\) Scheme with the \(ikj\)-Layout:}
     Unit stride in \(i\) then \(k\) directions, creating a tile from an 
     \(mi \times mj \times nk \) block, where \(1 \le  mi \le ni \)
     and \(1 \le  mj \le nj \).
     Note that memory is contiguous in planes, but strided by $O(ni \times nk)$.
     \fxnote{Bryce: review?}
   }
-  \label{fig:implementation:tiling:ikj_layout_tile_j}
+  \label{fig:implementation:tiling:ikj_layout_tile_ij}
   \includegraphics[width=0.70\columnwidth]{figures/ikj_layout_tile_ij_scheme.pdf}
   \vspace{-.5cm}
 \end{figure}
@@ -837,25 +837,24 @@ The benchmark suite has three major components: a multi-dimensional array
 \label{sec:experimental_setup:test_problem}
 
 %{\color{red} REPLACE WITH EXACT MATRIX / STENCIL \\
-The benchmarks in TSB solve the following one-dimensional diffusion equation in
-  each vertical column of a 3D Cartesian grid using the implicit Backward Time,
-  Centered Space (BTCS) finite difference method:
+The benchmarks in TSB are based on solving, in each vertical column,
+  a matrix derived from a simple finite difference stencil 
+  for an ``implicit Euler'' time step of the diffusion equation,
+  with a $u=0$ boundary condition.
+For a dimensionless diffusion coefficient \(D > 0\), this
+  produces a \emph{diagonally-dominant} tridiagonal matrix:
 \begin{align*}
-u_t &= Du_{kk}, \: k \: \text{in} \: (0, 1) \\
-                                          \\
-u(k, 0) &= sin(N * \pi * k)               \\
-u(0, t) &= u(1, t) = 0
-\end{align*}
-where \(D\) is the diffusion coefficient and \(N\) is the frequency of the sine
-  wave in the initial conditions.
-This problem has an exact solution:
-\begin{align*}
-u(k, t) = e^{(-D * N^2 * \pi^2 * t)} * sin(N * \pi * k)
+A = 
+\begin{bmatrix}
+1 + 3D & -D &     &          & 0        \\
+-D & 1 + 2D & -D &          &          \\
+    & ...& ...    & ...     &              \\
+    &         & -D & 1 + 2D     & -D \\
+0   &     &     & -D & 1 + 3D
+\end{bmatrix}  
 \end{align*}
 An identical form of the problem is initialized in every vertical column of the
-  3D grid.
-To verify numerical correctness, we compute the L2 norm and residual vector for
-  each vertical column solve.
+  3D grid, but the matrices are initialized every time.
 %}
 
 %{\color{red} THIS SHOULD BE MOVED UP INTO TILING /INTRO SECTION \\
@@ -1078,7 +1077,8 @@ We measure OpenMP parallelization, e.g. we time the \lstinline{#pragma omp for}
 Thus, parallel overheads are included in our recorded execution times.
 Timing measurements are recorded using \lstinline{std::chrono::steady\_clock},
   which uses a system clock with is monotonically
-  increasing~\cite{cpp14_standard_chrono_steady_clock}.
+  increasing~\cite{cpp14_standard_chrono_steady_clock}
+  \fxnote{Bryce: fix this reference?}.
 On the three platforms we ran on, \lstinline{std::chrono::steady\_clock} has
   nanosecond resolution.
 
@@ -1125,18 +1125,18 @@ Sources of \textbf{random observational error} include Work starvation and
   \centering
   \begin{minipage}{0.49\textwidth}
     \centering
-    \label{fig:results:tile_size_ivb}
     \caption{
       \textbf{Total Tile Size vs Effective Bandwidth (Ivy Bridge)} \fxnote{Lorem ipsum}
     }
+    \label{fig:results:tile_size_ivb}
     \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_edison_ivb_e5_2695_v2_08_31_2016_09_03_2016_12pus.pdf}
   \end{minipage}
   \begin{minipage}{0.49\textwidth}
     \centering
-    \label{fig:results:tile_size_hsw}
     \caption{
       \textbf{Total Tile Size vs Effective Bandwidth (Haswell):} \fxnote{Lorem ipsum}
     }
+    \label{fig:results:tile_size_hsw}
     \includegraphics[width=0.99\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_cori_hsw_e5_2698_v3_08_31_2016_09_03_2016_16pus.pdf}
   \end{minipage}
 \end{figure*}
@@ -1145,18 +1145,18 @@ Sources of \textbf{random observational error} include Work starvation and
   \captionsetup{width=0.39\textwidth}
   \begin{minipage}{0.49\textwidth}
     \centering
-    \label{fig:results:tile_size_knl}
     \caption{
       \textbf{Total Tile Size vs Effective Bandwidth (Knight's Landing):} \fxnote{Lorem ipsum}
     }
+    \label{fig:results:tile_size_knl}
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_tw_sweep_full_matrix_double_precision_production_carl_knl_7210_09_02_2016_64pus.pdf}
   \end{minipage}
   \begin{minipage}{0.49\textwidth}
     \centering
-    \label{fig:results:efficiency}
     \caption{
       \textbf{\% of STREAM Triad Effective Bandwidth:} \fxnote{Lorem ipsum}
     }
+    \label{fig:results:efficiency}
     \includegraphics[width=0.95\columnwidth]{figures/post_tsb_impact_of_optimizations_histogram_09_03_2016_09_04_2016_1socket.pdf}
   \end{minipage}
 \end{figure*}
@@ -1619,11 +1619,6 @@ columns can be performed.
 \item Auto-tuning and optimization strategies \\
   == tuning tile sizes / caching divides / etc...
 \end{itemize}
-
-\fxnote{HANS: Most of the length is due to two competing goals for the paper: 
-  an optimization process, or a benchmark. Skip the benchmark for now \dots}
-
-\fxnote{SAM/HANS: is anything learned from single-core results here? Drop?}
 
 \fxnote{HANS: where is the discussion of how the B/W is calculated? 
   Where are the wallclock times?}
