@@ -340,10 +340,7 @@ Overall, there is a gap in approaches that have both effective vectorization,
 
 Suppose we have an \(nk \times nk\) tridiagonal matrix \(A\) and two \(nk\) element
   vectors \(u^{s}\) and \(u^{s+1}\).  We wish to solve \(Au^{s+1} = u^{s}\) for
-  \(u^{s}\):
-\fxnote[footnote,noinline]{Bryce: I'd like to say symmetric positive-definite
-  or diagonally-dominant here to make it clear that our solver only works with
-  certain classes of tridiagonal matrices.}
+  \(u^{s+1}\):
 
 \[
 \begin{bmatrix}
@@ -382,7 +379,8 @@ We present the Simultaneous Streaming Thomas Algorithm (SSTA), a tridiagonal
   matrix solver based on the Thomas
   algorithm~\cite{ConteEtAlElementaryNumericalAnalysis,QuarteroniEtAl2007,TDMA}
   which was designed to solve large quantities of relatively small (\(O(30-100\))
-  systems efficiently.
+  systems efficiently if they are \emph{diagonally-dominant}, which avoids
+  the need for pivoting.
 The SSTA solver computes the solution to multiple systems simultaneously, facilitating
   the use of vector instructions.
 Additionally, SSTA iterates through memory in unit stride to enable software and 
@@ -395,7 +393,8 @@ We compare performance against STREAM Triad~\cite{stream} and a baseline solver
 \subsection{The Thomas Algorithm}
 \label{sec:implementation:thomas_algorithm}
 
-For a \emph{diagonally-dominant} tridiagonal matrix, we can use a simplified
+With the assumption of a \emph{diagonally-dominant} tridiagonal matrix, 
+  we can use a simplified
   form of Gaussian elimination that does not require pivoting, known as the
   Thomas algorithm or the tridiagonal matrix algorithm
   (TDMA)~\cite{ConteEtAlElementaryNumericalAnalysis,QuarteroniEtAl2007,TDMA}. 
@@ -436,7 +435,8 @@ We will consider multiplications, additions and division operations as FLOPs.
 Each iteration of the forward elimination loop contains 1 division, 2
   multiplications and 2 subtractions.
 This gives us a total of either \(3(nk-1)\) FLOPs on fused-multiply-add (FMA)
-  architectures~\cite{} or \(5(nk-1)\) FLOPs on non-FMA architectures.
+  architectures~\cite{intel_fma_website} or 
+  \(5(nk-1)\) FLOPs on non-FMA architectures.
 Next, the pre-substitution operation (the assignment to \lstinline{u[nk - 1]}
   in the above snipper) performs a single division.
 Finally, the backwards substitution loop, performs 1 multiplication, 1
@@ -480,7 +480,6 @@ Based on this analytic analysis, we can conclude that the Thomas algorithm is
 
 \begin{figure*}[!bt]
   \centering
-  \label{fig:implementation:independent_solve_strategy}
   \caption{
     \textbf{Independent Solve Strategy:} A vertical column of \(nk\) elements is
       extracted from a \(ni \times nj \times nk\) 3D Cartesian grid and used as
@@ -490,12 +489,12 @@ Based on this analytic analysis, we can conclude that the Thomas algorithm is
       in the vertical dimension \(k\) due to its small extent and loop-carried
       dependencies present in Thomas algorithm.
   }
+  \label{fig:implementation:independent_solve_strategy}
   \includegraphics[width=0.95\textwidth]{figures/independent_solve.pdf}
 \end{figure*}
 
 \begin{figure*}[!bt]
   \centering
-  \label{fig:implementation:simultaneous_solve_strategy}
   \caption{
     \textbf{Simultaneous Solve Strategy:} A tile of vertical columns, each 
       containing \(nk\) elements, is extracted from a \(ni \times nj \times nk\)
@@ -505,6 +504,7 @@ Based on this analytic analysis, we can conclude that the Thomas algorithm is
     This approach exposes task parallelism, exhibits good data locality and
       enables vectorization in one of the horizontal dimensions (\(i\)).
   }
+  \label{fig:implementation:simultaneous_solve_strategy}
   \includegraphics[width=0.95\textwidth]{figures/simultaneous_solve.pdf}
 \end{figure*}
 
@@ -653,38 +653,61 @@ The \(ikj\) layout arose as an optimization to combat data locality and prefetch
 
 \begin{figure}[!bt]
   \centering
+  \caption{
+    \textbf{Tile-\(j\) Scheme with the \(ijk\)-Layout:} 
+    Unit stride in \(i\) then \(j\) directions, creating a tile from an 
+    \(ni \times mj \times nk \) plane, where \(1 \le  mj \le nj \).
+    Note that memory is not contiguous in the \(k\) direction; 
+    colors indicate strides of $O(ni \times nj)$.
+    \fxnote{Bryce: review?}
+  }
   \label{fig:implementation:tiling:ijk_layout_tile_j}
-  \caption{
-    \textbf{Tile-\(j\) Scheme with the \(ijk\)-Layout:} \fxnote{Lorem Ipsum}
-  }
-  \includegraphics[width=0.95\columnwidth]{figures/ijk_layout_tile_j_scheme.pdf}
+  \includegraphics[width=0.70\columnwidth]{figures/ijk_layout_tile_j_scheme.pdf}
+  \vspace{-.5cm}
 \end{figure}
 
 \begin{figure}[!bt]
   \centering
+  \caption{
+    \textbf{Tile-\(ij\) Scheme with the \(ijk\)-Layout:} 
+    Unit stride in \(i\) then \(j\) directions, creating a tile from an 
+    \(mi \times mj \times nk \) block, 
+    where \(1 \le  mi \le ni \) and \(1 \le  mj \le nj \).
+    Note that memory is not contiguous in \(k\) here as well.
+    \fxnote{Bryce: review?}
+  }
   \label{fig:implementation:tiling:ijk_layout_tile_j}
-  \caption{
-    \textbf{Tile-\(ij\) Scheme with the \(ijk\)-Layout:} \fxnote{Lorem Ipsum}
-  }
-  \includegraphics[width=0.95\columnwidth]{figures/ijk_layout_tile_ij_scheme.pdf}
+  \includegraphics[width=0.70\columnwidth]{figures/ijk_layout_tile_ij_scheme.pdf}
+  \vspace{-.5cm}
 \end{figure}
 
 \begin{figure}[!bt]
   \centering
-  \label{fig:implementation:tiling:ikj_layout_tile_j}
   \caption{
-    \textbf{Tile-\(j\) Scheme with the \(ikj\)-Layout:} \fxnote{Lorem Ipsum}
+    \textbf{Tile-\(j\) Scheme with the \(ikj\)-Layout:}
+    Unit stride in \(i\) then \(k\) directions, creating a tile from an 
+    \(ni \times mj \times nk \) block, where \(1 \le  mj \le nj \).
+    Note that memory is contiguous in the tile.
+    \fxnote{Bryce: review?}
   }
-  \includegraphics[width=0.95\columnwidth]{figures/ikj_layout_tile_j_scheme.pdf}
+  \label{fig:implementation:tiling:ikj_layout_tile_j}
+  \includegraphics[width=0.70\columnwidth]{figures/ikj_layout_tile_j_scheme.pdf}
+  \vspace{-.5cm}
 \end{figure}
 
 \begin{figure}[!bt]
   \centering
-  \label{fig:implementation:tiling:ikj_layout_tile_j}
   \caption{
     \textbf{Tile-\(ij\) Scheme with the \(ikj\)-Layout:} \fxnote{Lorem Ipsum}
+    Unit stride in \(i\) then \(k\) directions, creating a tile from an 
+    \(mi \times mj \times nk \) block, where \(1 \le  mi \le ni \)
+    and \(1 \le  mj \le nj \).
+    Note that memory is contiguous in planes, but strided by $O(ni \times nk)$.
+    \fxnote{Bryce: review?}
   }
-  \includegraphics[width=0.95\columnwidth]{figures/ikj_layout_tile_ij_scheme.pdf}
+  \label{fig:implementation:tiling:ikj_layout_tile_j}
+  \includegraphics[width=0.70\columnwidth]{figures/ikj_layout_tile_ij_scheme.pdf}
+  \vspace{-.5cm}
 \end{figure}
 
 To ensure good CPU cache utilization, it is often necessary to break a larger
