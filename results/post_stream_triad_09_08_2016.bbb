@@ -1,0 +1,12 @@
+# Note that KNL numbers have been scaled by 4/3 from the raw results to
+# workaround the streaming stores issue.
+#
+## CTL:PLAT:Platform:
+## IND:CORES:# of Cores per Socket:cores/socket
+## IND:PUS:# of Processing Units per Core:PUs/core
+## DEP:TRIAD_BW_AVG:STREAM Triad Kernel Bandwidth - Average, 480 Samples on KNL and 640 Samples on Xeons:MBs/s
+## DEP:TRIAD_BW_STD:STREAM Triad Kernel Bandwidth - Sample Standard Deviation:MBs/s
+## DEP:TRIAD_BW_CON:STREAM Triad Kernel Bandwidth - 95% Confidence Interval:MBs/s
+"Ivy Bridge"       12 1  49.7640410337 0.751504773359 0.0583328817855
+"Haswell"          16 1  60.4475448336 0.53541583205  0.0415597472488
+"Knight's Landing" 64 1 419.282842656  8.73499563892  0.783409146976
