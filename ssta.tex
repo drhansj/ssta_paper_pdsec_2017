@@ -1,4 +1,7 @@
-\documentclass{sig-alternate}
+\documentclass[10pt, conference, compsocconf]{IEEEtran}
+
+% ACM-style
+%\documentclass{sig-alternate}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -184,16 +187,27 @@ xleftmargin=0.1cm,
 \title{Solving Large Quantities of Small Matrix Problems on Cache-Coherent Many-Core SIMD Architectures}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\numberofauthors{1}
-\author{
-\alignauthor
-Bryce Adelstein Lelbach, Hans Johansen, and Samuel Williams\\
-\affaddr{Lawrence Berkeley National Laboratory, Computational Research Division}\\
-\email{{\it \{balelbach, hjohansen, swwilliams\}@lbl.gov}}\\
+\author{\IEEEauthorblockN{Bryce Adelstein Lelbach, Hans Johansen, and Samuel Williams}
+\IEEEauthorblockA{Lawrence Berkeley National Laboratory, Computational Research Division\\
+\{balelbach, hjohansen, swwilliams\}@lbl.gov\\
 %{\small Revision \gitAbbrevHash \gitReferences, Built at \currenttime \vspace{1ex} on \today}
-}
+}}
+
+% ACM-style Authors
+%\numberofauthors{1}
+%\author{
+%\alignauthor
+%Bryce Adelstein Lelbach, Hans Johansen, and Samuel Williams\\
+%\affaddr{Lawrence Berkeley National Laboratory, Computational Research Division}\\
+%\email{{\it \{balelbach, hjohansen, swwilliams\}@lbl.gov}}\\
+%%{\small Revision \gitAbbrevHash \gitReferences, Built at \currenttime \vspace{1ex} on \today}
+%}
 
 \maketitle
+
+% Enable for page numbers
+\thispagestyle{plain}
+\pagestyle{plain}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{abstract}
