@@ -254,7 +254,7 @@ This approach, for example, is used by
   LAPACK routines such as \lstinline{dptsv()}, \lstinline{dtsvb()},
   \lstinline{dgtsv()} and
   \lstinline{dgttrs()}~\cite{mkl_ref_driver_routines}.
-In our case, it is usually sub-optimal on SIMD many-core and SIMT GPGPU
+In our case, it is usually sub-optimal on SIMD many-core and GPGPU
   architectures to simply call an optimized linear algebra library, 
   such as Intel's Math Kernel Library (MKL)~\cite{mkl} and NVIDIA's
   CUDA BLAS library (cuBLAS)~\cite{cublas}.
@@ -267,7 +267,7 @@ We have developed a model problem that mimics the conditions encountered in
   these kinds of large-scale simulations. 
 Key aspects of the test problem include:
 \begin{itemize}
-\item A 3D Cartesian (that is, \((i,j,k)\) indices), where different matrix
+\item A 3D Cartesian grid (that is, \((i,j,k)\) indices), where different matrix
   systems in the \textbf{vertical dimension} \(k\) are generated at each
   \textbf{horizontal coordinate} \((i,j)\) and the extent of \(k\) is
   \(O(30-100)\).
@@ -467,7 +467,7 @@ The lower bound for the Thomas algorithm's arithmetic intensity is \(1/32\)
   FLOPs/byte when \(nk=1\). 
 The upper bound is \(5/48\) FLOPS/byte (FMA) or \(1/6\) FLOPs/byte (non-FMA) as
   \(nk\) approaches infinity.
-Based on this analytic analysis, we can conclude that the Thomas algorithm is
+Based on this analysis, we can conclude that the Thomas algorithm is
   \textbf{memory-bandwidth bound}.
 Thus, we use effective bandwidth, not FLOPs, as our performance metric.
 
@@ -850,6 +850,10 @@ Edison features Intel Xeon E5-2695 v2 Ivy Bridge
   Xeon E5-2698 v3 Haswell (HSW) processors~\cite{intel_ark_xeon_e5_2698_v3}.
 However, in general, the two Xeon platforms have a very similar performance
   profile for our application.
+Commensurate with MPI parallelization for distributed memory, in all experiments
+  we restricted ourselves to a single NUMA nodel
+As cluster-on-die (COD) is not enabled on our Xeon Phi platform, one NUMA node
+  corresponds to a single socket on each of our test systems.
 
 Our Xeon Phi testbed, which features Intel Xeon Phi 7210 Knight's Landing
   (KNL) processors~\cite{intel_ark_xeon_phi_7210}, is notably different from
@@ -883,7 +887,7 @@ We rely entirely on the compiler vectorization engine for performant vector
   assumptions.
 Avoiding vector intrinsics and hand-written assembly makes TSB performance
   portable between different x86-64 vector instruction sets (SSE, AVX, AVX2,
-  AVX512) and simplifies porting to other architectures (such as SIMT GPGPUs).
+  AVX512) and simplifies porting to other architectures (such as GPGPUs).
 We have also found it leads to better code generation by giving the compiler
   the freedom to select the correct instructions and perform optimizations which
   we have found to be inhibited by explicit vector intrinsics, such as
@@ -893,7 +897,7 @@ SSTA is task-parallelized using OpenMP \lstinline{#pragma}s~\cite{openmp_spec}.
 Since the problem is embarrassingly parallel in the horizontal dimensions, it
   is easy to statically load balance (dimension extents and tile sizes
   permitting).
-The Portablity Hardware Locality (hwloc) topology
+The Portable Hardware Locality (hwloc) topology
   framework~\cite{hwloc} is used to pin application threads to hardware execution
   resources.
 
@@ -975,7 +979,7 @@ Sources of \textbf{random observational error} include work starvation and
 \begin{figure*}[!bth]
   \centering
   \caption{
-    \textbf{SSTA Effective Bandwidth vs Total Tile Size:}
+    \textbf{SSTA Effective Bandwidth vs. Total Tile Size:}
     The results of a parameter sweep on our two Intel Xeon platforms
       demonstrating the effect of total tile size on the performance of the
       SSTA solver is shown below (MKL baseline and STREAM Triad results shown as
@@ -1019,7 +1023,7 @@ Sources of \textbf{random observational error} include work starvation and
 \begin{figure}[!h]
   \centering
   \caption{
-    \textbf{SSTA Effective Bandwidth vs Total Tile Size (Knight's Landing):}
+    \textbf{SSTA Effective Bandwidth vs. Total Tile Size (Knight's Landing):}
     Shown below are the results of a parameter sweep on our Intel Xeon Phi
       Knight's Landing platform showing the effect of data layout and total
       tile size on the performance of the SSTA solver.
@@ -1260,7 +1264,7 @@ However, on Knight's Landing the best \(ikj\)-layout result achieves
     & \multicolumn{1}{ c|}{\textbf{Optimal Total}}
     & \multicolumn{1}{ c|}{\textbf{Effective Bandwidth}}
     & \multicolumn{1}{ c|}{\textbf{Percentage of STREAM}}
-    & \multicolumn{1}{ c|}{\multirow{2}{*}{\textbf{Speedup vs MKL}}} \\
+    & \multicolumn{1}{ c|}{\multirow{2}{*}{\textbf{Speedup vs. MKL}}} \\
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     & \multicolumn{1}{ c|}{\textbf{Tile Size}}
@@ -1407,8 +1411,7 @@ We would like to extend the range of hardware platforms and configurations in
 %We have not yet fully investigated the use of hyper-threads with SSTA.
 On Knight's Landing, further effort is needed to study the trade-off between
   utilizing MCDRAM as a cache versus programmable memory.
-We are also interested in testing SSTA on SIMT GPGPU
-  architectures.
+We are also interested in testing SSTA on GPGPU architectures.
 
 There are also a number of related numerical problems which we believe could be
   addressed by some of the techniques we describe in this paper.
