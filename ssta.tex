@@ -387,8 +387,8 @@ Our matrix \(A\) is stored as a set of three vectors: an \(nk-1\) element
 
 \begin{figure*}[!bth]
   \centering
-  \caption{
-    \textbf{Independent Solve Strategy:} A vertical column of \(nk\) elements is
+  \caption{\small
+      \textbf{Independent Solve Strategy:} A vertical column of \(nk\) elements is
       extracted from a \(ni \times nj \times nk\) 3D Cartesian grid and used as
       the right-hand side in a tridiagonal linear system.
     The system for each column is solved independently from other columns.
@@ -405,7 +405,7 @@ Our matrix \(A\) is stored as a set of three vectors: an \(nk-1\) element
 
 \begin{figure*}[!bth]
   \centering
-  \caption{
+  \caption{\small
     \textbf{Simultaneous Solve Strategy:} A tile of vertical columns, each 
       containing \(nk\) elements, is extracted from a \(ni \times nj \times nk\)
       3D Cartesian grid.
@@ -584,7 +584,7 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
 
 \begin{figure*}[!bth]
   \centering
-  \caption{
+  \caption{\small
     \textbf{Example of Different Layouts and Tiling Schemes:}
       The SSTA solver supports four possible layout and tiling scheme combinations.
       Suppose we are partition an \(ijk\)-layout grid into tiles containing
@@ -1005,7 +1005,7 @@ Removing this source of systemic error would be straightforward, but
 
 \begin{figure*}[!bth]
   \centering
-  \caption{
+  \caption{\small
     \textbf{SSTA Effective Bandwidth vs. Total Tile Size:}
     The results of a parameter sweep on our two Intel Xeon platforms
       demonstrating the effect of total tile size on the performance of the
@@ -1049,7 +1049,7 @@ Removing this source of systemic error would be straightforward, but
 
 \begin{figure}[!h]
   \centering
-  \caption{
+  \caption{\small
     \textbf{SSTA Effective Bandwidth vs. Total Tile Size (Knight's Landing):}
     Shown below are the results of a parameter sweep on our Intel Xeon Phi
       Knight's Landing platform showing the effect of data layout and total
@@ -1075,7 +1075,7 @@ Removing this source of systemic error would be straightforward, but
 
 \begin{figure}[!h]
   \centering
-  \caption{
+  \caption{\small
     \textbf{Percentage of STREAM Triad Effective Bandwidth Attained by SSTA:}
     Across all three microarchitectures, the SSTA solver with an optimal tile
       size improves performance substantially over the MKL baseline, and
@@ -1463,17 +1463,16 @@ We will have to explore the performance trade-offs between
 Our efforts in the immediate future will revolve around research into those
   trade-offs and integration of SSTA into our production software.
 
-%\section*{Acknowledgments}
-%\label{sec:ack}
-%
-%This material is based upon work supported by the U.S. Department of Energy,
-%  Office of Science, Advanced Scientific Computing Research, Scientific
-%  Discovery through Advanced Computing (SciDAC) program.
-%This work was partially supported by the Intel Parallel Computing Center (IPCC)
-%  at Lawrence Berkeley National Laboratory, and used resources at the National
-%  Energy Research Scientific Computing Center (NERSC), which is supported by
-%  the U.S. Department of Energy Office of Science's Advanced Scientific
-%  Computing Research (ASCR) program under contract number DE-AC02-05CH11231.  
+\section*{Acknowledgments}
+\label{sec:ack}
+This material is based upon work supported by the U.S. Department of Energy,
+Office of Science, Advanced Scientific Computing Research, Scientific
+Discovery through Advanced Computing (SciDAC) program.
+This work was partially supported by the Intel Parallel Computing Center (IPCC)
+at Lawrence Berkeley National Laboratory, and used resources at the National
+Energy Research Scientific Computing Center (NERSC), which is supported by
+the U.S. Department of Energy Office of Science's Advanced Scientific
+Computing Research (ASCR) program under contract number DE-AC02-05CH11231.  
 
 \bibliographystyle{ssta}
 \bibliography{ssta}
