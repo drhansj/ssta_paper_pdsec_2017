@@ -586,17 +586,14 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
   \centering
   \caption{\small
     \textbf{Example of Different Layouts and Tiling Schemes:}
-      The SSTA solver supports four possible layout and tiling scheme combinations.
-      Suppose we are partition an \(ijk\)-layout grid into tiles containing
-        \((ni^2/4)(nk)\) elements, producing 
-        \(ni/2 \times ni/2 \times nk\) tiles with the \(ijk\)-layout and the
-          tile-\(ij\) scheme,
-        \(ni \times ni/4 \times nk\) tiles with the \(ijk\)-layout and the
-          tile-\(j\) scheme,
-        \(ni/2 \times ni/2 \times nk\) tiles with the \(ikj\)-layout and the
-          tile-\(ij\) scheme and
-        \(ni \times ni/4 \times nk\) tiles with the \(ikj\)-layout and the
-          tile-\(j\) scheme.
+      The SSTA solver supports four layout and tiling scheme combinations.
+      The figures below show how the different combinatons might partition a
+        grid into four tiles each containing \((ni^2/4)(nk)\) elements (one 
+        tile is shown).
+      With the tile-\(ij\) scheme we get \(ni/2 \times ni/2 \times nk\) tiles,
+        and with the tile-\(i\) scheme we get \(ni \times ni/4 \times nk\) tiles.
+      Different colors indicate different contiguous regions within the tile.
+      Regions with similar colors are closer to each other in memory.
   }
   \label{fig:impl:tiling_schemes}
   %\vspace{1em}
@@ -604,9 +601,8 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
     \centering
     \subfloat[
       \textbf{\(ijk\)-Layout with the Tile-\(ij\) Scheme:}
-%      Each tile consists of \((ni/2)(nk)\) contiguous \(i\)-rows (colored
-%        below), each containing \(ni/2\) elements.
-      This layout and tiling combination exhibits the least contiguity out of the
+      \((ni/2)(nk)\) contiguous \(i\)-rows each containing \(ni/2\) elements.
+      This layout and tiling combination exhibits the worst contiguity out of the
         four different options.
     ]{        
       \includegraphics[width=0.70\columnwidth]{figures/tiling/ijk_layout_tile_ij_scheme_diagram.pdf}
@@ -617,8 +613,7 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
     \centering
     \subfloat[
       \textbf{\(ijk\)-Layout with the Tile-\(j\) Scheme:}
-%      Each tile consists of \(nk\) contiguous \(ij\)-planes (colored
-%        below), each containing \(ni^2/4\) elements.
+      \(nk\) contiguous \(ij\)-planes, each containing \(ni^2/4\) elements.
       This layout and tiling combination exhibits the best contiguity for the 
         \(ijk\)-layout.
     ]{
@@ -631,10 +626,9 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
     \centering
     \subfloat[
       \textbf{\(ikj\)-Layout with the Tile-\(ij\) Scheme:}
-%      Each tile consists of \(ni/2\) contiguous \(ik\)-planes (colored
-%        below), each containing \((ni/2)(nk)\) elements.
-      This layout and tiling combination exhibits greater contiguity
-        than either \(ijk\)-layout tiling scheme.
+      \((ni/2)(nk)\) contiguous \(i\)-rows, each containing \(ni/2\) elements.
+      This layout and tiling combination exhibits the worst contiguity out of the
+        four different options.
     ]{        
       \includegraphics[width=0.70\columnwidth]{figures/tiling/ikj_layout_tile_ij_scheme_diagram.pdf}
       \label{fig:impl:tiling:ikj_tile_ij_scheme}
@@ -644,7 +638,7 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
     \centering
     \subfloat[
       \textbf{\(ikj\)-Layout with the Tile-\(j\) Scheme:}
-%      Each tile is one contiguous region containing \((ni^2/4)(nk)\) elements.
+      One contiguous region containing \((ni^2/4)(nk)\) elements.
       This layout and tiling combination exhibits the greatest contiguity out of
         the four different options, and provides the best performance on
         Knight's Landing.
@@ -778,8 +772,8 @@ There is a trade-off between these two schemes, with the tile-\(ij\) scheme
   offering greater flexibility in tile size and the tile-\(j\) scheme offering
   greater contiguity. 
 
-For example, suppose we partition an \(ijk\)-layout grid into tiles containing
-  \((ni^2/4)(nk)\) elements, with the tile-\(ij\) scheme producing
+For example, suppose we partition an \(ijk\)-layout grid into four tiles each
+  containing \((ni^2/4)(nk)\) elements, with the tile-\(ij\) scheme producing
   \(ni/2 \times ni/2 \times nk\) tiles
   (Figure~\ref{fig:impl:tiling:ijk_tile_ij_scheme})
   and the tile-\(i\) scheme producing
@@ -806,9 +800,9 @@ Additionally, the tile-\(j\) tiles are completely contiguous regions of memory,
   caching and further assisting hardware prefetching.
 
 Consider switching to the \(ikj\)-layout in the previous example.
-The tile-\(ij\) tiles would contain \(ni/2\) contiguous \(ik\)-planes, each
-  containing \((ni/2)(nk)\) elements
-  (Figure~\ref{fig:impl:tiling:ikj_tile_ij_scheme}).
+The tile-\(ij\) tiles would be the same as before: \(ni/2 \times ni/2 \times nk\)
+  tiles consisting of \((ni/2)(nk)\) contiguous \(i\)-rows of only \(ni/2\)
+  elements each (Figure~\ref{fig:impl:tiling:ikj_tile_ij_scheme}).
 The tile-\(j\) tiles would be one contiguous region containing all
   \((ni^2/4)(nk)\) elements
   (Figure~\ref{fig:impl:tiling:ikj_tile_j_scheme}).
