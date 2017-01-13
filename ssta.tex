@@ -603,7 +603,7 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
       \textbf{\(ijk\)-Layout with the Tile-\(ij\) Scheme:}
       \((a/2)(b)\) contiguous \(i\)-rows each containing \(a/2\) elements.
       This layout and tiling combination exhibits the worst contiguity out of the
-        four different options.
+        the four different options.
     ]{        
       \includegraphics[width=0.70\columnwidth]{figures/tiling/ijk_layout_tile_ij_scheme_diagram.pdf}
       \label{fig:impl:tiling:ijk_tile_ij_scheme}
@@ -626,9 +626,9 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
     \centering
     \subfloat[
       \textbf{\(ikj\)-Layout with the Tile-\(ij\) Scheme:}
-      \((a/2)(b)\) contiguous \(i\)-rows, each containing \(a/2\) elements.
+      \((a/2)(b)\) contiguous \(i\)-rows each containing \(a/2\) elements.
       This layout and tiling combination exhibits the worst contiguity out of the
-        four different options.
+        the four different options.
     ]{        
       \includegraphics[width=0.70\columnwidth]{figures/tiling/ikj_layout_tile_ij_scheme_diagram.pdf}
       \label{fig:impl:tiling:ikj_tile_ij_scheme}
@@ -839,19 +839,19 @@ The benchmarks in the TSB suite solve a matrix in each vertical column derived
 The diagonally-dominant tridiagonal matrix takes the following form,
   where \(D\) is a dimensionless diffusion coefficient (\(D > 0\)),
   \(\Delta \, t\) is the time step size, \(\Delta \, k\) is the vertical grid
-  spacing and \(r=D \, \Delta \, t / \Delta \, k < 1/2\):
+  spacing and \(r=D \, \Delta \, t / (\Delta k)^2 \):
 \begin{align*}
 A = 
 \begin{bmatrix}
 1   & 0      &     &        & 0  \\
--r  & 1 - 2r & -r  &        &    \\
+-r  & 1 + 2r & -r  &        &    \\
     & ...    & ... & ...    &    \\
-    &        & -r  & 1 - 2r & -r \\
+    &        & -r  & 1 + 2r & -r \\
 0   &        &     & 0      & 1
 \end{bmatrix}  
 \end{align*}
 An identical form of the problem is initialized in every vertical column of the
-  grid.
+  grid, although the matrix for each is constructed separately for each solve.
 
 \subsection{Hardware Platforms}
 \label{sec:setup:hardware_platforms}
@@ -1089,12 +1089,11 @@ Removing this source of systemic error would be straightforward, but
 % Hypothesis 1.1: SSTA can outperform legacy solver
 % Hypothesis 1.2: SSTA can efficiently utilize memory bandwidth 
 % Prediction 1.1 and Prediction 1.2 follow naturally 
-We developed SSTA to replace the underperforming MKL-based vertical column
-  solver in our production climate application because we believed that a new
-  algorithm which solves multiple vertical columns simultaneously would
-  efficiently utilize available memory bandwidth and significantly outperform the
-  legacy solver by exhibiting performant data movement patterns and facilitating
-  vectorization.
+We developed SSTA to replace the MKL-based vertical column
+  solver in our production climate application, initially because
+  the matrix size was not a multiple of the KNL vector length, but
+  also because we believed better vectorization and data movement
+  would be achieved by solving multiple vertical columns simultaneously.
 
 % Hypothesis 2: SSTA will be highly sensitive to data layout changes and total
 % tile size and will achieve optimal performance for a particular tile size
@@ -1122,7 +1121,7 @@ We predicted that we would see the following:
 \item The MKL baseline solver would be very insensitive to total tile size,
   excluding extremely small (high overhead) and extremely large (insufficient
   parallelism) sizes since it solves each column independently and thus cannot
-  exploit vector operations and data locality like the SSTA solver does.
+  exploit vector operations and data locality like a multi-column solver would.
 % Prediction 2.2: Total tile sizes which fit in the L1D will be too small to be
 % feasible.
 \item Total tile sizes small enough to fit into the L1D cache would not be
@@ -1365,8 +1364,9 @@ We posit that a modified version of our prediction is more accurate; as we move
 % Analysis of Prediction 1.2 (can efficiently utilize memory bandwidth)
 
 We introduced the Simultaneous Streaming Thomas Algorithm (SSTA) solver, which
-  can efficiently solve many small tridiagonal matrix systems simultaneously, a
-  problem which arises in a number of scientific application domains.
+  can efficiently solve many small tridiagonal matrix systems simultaneously, 
+  and addresses a performance bottleneck
+  that arises in a number of scientific application domains.
 We have demonstrated the impact of different tiling schemes, total tile sizes
   and data layouts, and how they interact with the memory subsystem.
 A parameter sweep demonstrated the sensitivity of the SSTA solver to changes in
@@ -1410,14 +1410,16 @@ There are a number of optimizations which we developed for the SSTA
 %  performance if combined together and had little impact in parallel.
 
 The version of the TSB suite described in this paper uses what we refer to as
-  the \textbf{full-grid} scheme, where the tridiagonal matrix is built and stored
+  the ``full-grid'' scheme, where the tridiagonal matrix is built and stored
   for all vertical columns.
-The alternative \textbf{rolling-grid} scheme builds the matrix on the fly with
+The alternative ``rolling-grid'' scheme builds the matrix on the fly with
   a tile-sized \(a\), \(b\) and \(c\).
 In addition to offering storage savings, we believe the rolling-grid scheme
   will further improve data locality and hardware prefetching performance as the
   storage for the matrix will be reused for all tiles that a processing
   unit executes.
+This would be especially appropriate for non-linear solvers, where the 
+  matrix needs to be updated every iteration.
 Further research is also needed to explore smaller total tile sizes, as well as
   the tile-\(ij\) scheme, as it may be beneficial to production applications that
   are willing to accept some performance trade-off for increased flexibility in
@@ -1444,13 +1446,14 @@ The algorithm needs to be extended to include matrix assembly
   with a Jacobian calculation, such as those used in Newton iterations.
 The challenge here is that some vertical columns may converge faster than
   others, and vector masks or scalar iterative refinement may be required.
-Opportunities to extend the algorithm to banded matrices and incomplete LU-type 
+Opportunities to extend the algorithm to banded or other sparse matrices, 
+  and incomplete LU-type 
   algorithms are straight-forward for diagonally-dominant cases, but
   pivoting has the potential to hinder vectorization and memory access patterns.
 
 Finally, more complex multi-kernel applications integrate multiple solvers and
-  computationally phases, such as traditional stencil finite difference
-  operations and time integration algorithms. 
+  computationally phases, such as traditional finite difference
+  stencil operations and time integration algorithms. 
 We will have to explore the performance trade-offs between
   the \(kji\)-, \(ijk\)- and \(ikj\)-layouts in these applications.
 % Closer.
