@@ -58,7 +58,7 @@ showspaces=false,                   % show spaces adding particular underscores
 showstringspaces=false,             % underline spaces within strings
 showtabs=false,                     % show tabs within strings adding particular
                                     % underscores
-keywordstyle=\bfseries\color{blue}, % color of the keywords
+keywordstyle=\bfseries\lst@ifdisplaystyle\color{blue}\fi, % color of the keywords
 commentstyle=\color{darkgreen},     % color of the comments
 stringstyle=\color{darkred},        % color of strings
 captionpos=b,                       % sets the caption-position to top
@@ -588,10 +588,10 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
     \textbf{Example of Different Layouts and Tiling Schemes:}
       The SSTA solver supports four layout and tiling scheme combinations.
       The figures below show how the different combinatons would partition an
-        \(a \times a \times b\) grid into four tiles each containing
-        \((a^2/4)(b)\) elements (one tile is shown).
-      With the tile-\(ij\) scheme we get \(a/2 \times a/2 \times b\) tiles,
-        and with the tile-\(i\) scheme we get \(a \times a/4 \times b\) tiles.
+        \(d \times d \times e\) grid into four tiles each containing
+        \((d^2/4)(e)\) elements (one tile is shown).
+      With the tile-\(ij\) scheme we get \(d/2 \times d/2 \times e\) tiles,
+        and with the tile-\(i\) scheme we get \(d \times d/4 \times e\) tiles.
       Different colors indicate different contiguous regions within the tile.
       Regions with similar colors have greater locality with each other. 
   }
@@ -601,7 +601,7 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
     \centering
     \subfloat[
       \textbf{\(ijk\)-Layout with the Tile-\(ij\) Scheme:}
-      \((a/2)(b)\) contiguous \(i\)-rows each containing \(a/2\) elements.
+      \((d/2)(e)\) contiguous \(i\)-rows each containing \(d/2\) elements.
       This layout and tiling combination exhibits the worst contiguity out of the
         the four different options.
     ]{        
@@ -613,7 +613,7 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
     \centering
     \subfloat[
       \textbf{\(ijk\)-Layout with the Tile-\(j\) Scheme:}
-      \(b\) contiguous \(ij\)-planes, each containing \(a^2/4\) elements.
+      \(e\) contiguous \(ij\)-planes, each containing \(d^2/4\) elements.
       This layout and tiling combination exhibits the best contiguity for the 
         \(ijk\)-layout.
     ]{
@@ -626,9 +626,9 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
     \centering
     \subfloat[
       \textbf{\(ikj\)-Layout with the Tile-\(ij\) Scheme:}
-      \((a/2)(b)\) contiguous \(i\)-rows each containing \(a/2\) elements.
-      This layout and tiling combination exhibits the worst contiguity out of the
-        the four different options.
+      \((d/2)(e)\) contiguous \(i\)-rows each containing \(d/2\) elements.
+      This layout and tiling combination exhibits the worst contiguity for the
+        \(ikj\)-layout.
     ]{        
       \includegraphics[width=0.70\columnwidth]{figures/tiling/ikj_layout_tile_ij_scheme_diagram.pdf}
       \label{fig:impl:tiling:ikj_tile_ij_scheme}
@@ -638,7 +638,7 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
     \centering
     \subfloat[
       \textbf{\(ikj\)-Layout with the Tile-\(j\) Scheme:}
-      One contiguous region containing \((a^2/4)(b)\) elements.
+      One contiguous region containing \((d^2/4)(e)\) elements.
       This layout and tiling combination exhibits the greatest contiguity out of
         the four different options, and provides the best performance on
         Knight's Landing.
@@ -773,16 +773,16 @@ There is a trade-off between these two schemes, with the tile-\(ij\) scheme
   greater contiguity. 
 
 For example, suppose we partition an \(ijk\)-layout grid into four tiles each
-  containing \((a^2/4)(b)\) elements, with the tile-\(ij\) scheme producing
-  \(a/2 \times a/2 \times b\) tiles
+  containing \((d^2/4)(e)\) elements, with the tile-\(ij\) scheme producing
+  \(d/2 \times d/2 \times e\) tiles
   (Figure~\ref{fig:impl:tiling:ijk_tile_ij_scheme})
   and the tile-\(i\) scheme producing
-  \(a \times a/4 \times b\) tiles
+  \(d \times d/4 \times e\) tiles
   (Figure~\ref{fig:impl:tiling:ijk_tile_j_scheme}).
-For the tile-\(ij\) scheme, tiles contain \((a/2)(b)\) contiguous
-  \(i\)-rows of only \(a/2\) elements each.
-For the tile-\(j\) scheme, tiles contain \(b\) contiguous \(ij\)-planes of
-  \(a^2/4\) elements each.
+For the tile-\(ij\) scheme, tiles contain \((d/2)(e)\) contiguous
+  \(i\)-rows of only \(d/2\) elements each.
+For the tile-\(j\) scheme, tiles contain \(e\) contiguous \(ij\)-planes of
+  \(d^2/4\) elements each.
 
 While the tile-\(j\) scheme offers greater contiguity than the
   tile-\(ij\) in this example, the tile-\(j\) tiles are not a single contiguous
@@ -800,18 +800,18 @@ Additionally, the tile-\(j\) tiles are completely contiguous regions of memory,
   caching and further assisting hardware prefetching.
 
 Consider switching to the \(ikj\)-layout in the previous example.
-The tile-\(ij\) tiles would be the same as before: \(a/2 \times a/2 \times b\)
-  tiles consisting of \((a/2)(b)\) contiguous \(i\)-rows of only \(a/2\)
+The tile-\(ij\) tiles would be the same as before: \(d/2 \times d/2 \times e\)
+  tiles consisting of \((d/2)(e)\) contiguous \(i\)-rows of only \(d/2\)
   elements each (Figure~\ref{fig:impl:tiling:ikj_tile_ij_scheme}).
-The tile-\(j\) tiles would be one contiguous region containing all
-  \((a^2/4)(b)\) elements
+However, the tile-\(j\) tiles would be one contiguous region containing all
+  \((d^2/4)(e)\) elements
   (Figure~\ref{fig:impl:tiling:ikj_tile_j_scheme}).
 
 The only notable downside to the tile-\(j\) scheme is the loss of
   flexibility in tile sizes.
-The smallest tile size for the tile-\(j\) scheme is a \(a \times 1 \times b\)
+The smallest tile size for the tile-\(j\) scheme is a \(d \times 1 \times e\)
   tile (an \(ik\) plane), while the smallest tile size for the
-  tile-\(ij\) scheme is a \(1 \times 1 \times b\) tile (a single column).
+  tile-\(ij\) scheme is a \(1 \times 1 \times e\) tile (a single column).
 We have not found this restriction to be overly restrictive.
 
 We present results with the tile-\(j\) scheme and both the \(ijk\)- and
@@ -1089,12 +1089,10 @@ Removing this source of systemic error would be straightforward, but
 % Hypothesis 1.1: SSTA can outperform legacy solver
 % Hypothesis 1.2: SSTA can efficiently utilize memory bandwidth 
 % Prediction 1.1 and Prediction 1.2 follow naturally 
-We developed SSTA to replace the MKL-based vertical column
-  solver in our production climate application, initially because
-  the matrix size was not a multiple of the KNL vector length, but
-  also because we believed better vectorization and data movement
-  would be achieved by solving multiple vertical columns simultaneously.
-
+We developed SSTA to replace the MKL-based vertical column solver in our
+  production climate application because we believed better vectorization and
+  data movement would be achieved by solving multiple vertical columns
+  simultaneously.
 % Hypothesis 2: SSTA will be highly sensitive to data layout changes and total
 % tile size and will achieve optimal performance for a particular tile size
 % that balances reuse/locality/amortization.
@@ -1121,7 +1119,7 @@ We predicted that we would see the following:
 \item The MKL baseline solver would be very insensitive to total tile size,
   excluding extremely small (high overhead) and extremely large (insufficient
   parallelism) sizes since it solves each column independently and thus cannot
-  exploit vector operations and data locality like a multi-column solver would.
+  exploit vector operations and data locality like the SSTA solver does.
 % Prediction 2.2: Total tile sizes which fit in the L1D will be too small to be
 % feasible.
 \item Total tile sizes small enough to fit into the L1D cache would not be
