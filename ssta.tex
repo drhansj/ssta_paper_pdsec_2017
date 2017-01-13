@@ -839,19 +839,19 @@ The benchmarks in the TSB suite solve a matrix in each vertical column derived
 The diagonally-dominant tridiagonal matrix takes the following form,
   where \(D\) is a dimensionless diffusion coefficient (\(D > 0\)),
   \(\Delta \, t\) is the time step size, \(\Delta \, k\) is the vertical grid
-  spacing and \(r=D \, \Delta \, t / \Delta \, k < 1/2\):
+  spacing and \(r=D \, \Delta \, t / (\Delta k)^2 \):
 \begin{align*}
 A = 
 \begin{bmatrix}
 1   & 0      &     &        & 0  \\
--r  & 1 - 2r & -r  &        &    \\
+-r  & 1 + 2r & -r  &        &    \\
     & ...    & ... & ...    &    \\
-    &        & -r  & 1 - 2r & -r \\
+    &        & -r  & 1 + 2r & -r \\
 0   &        &     & 0      & 1
 \end{bmatrix}  
 \end{align*}
 An identical form of the problem is initialized in every vertical column of the
-  grid.
+  grid, although the matrix for each is constructed separately for each solve.
 
 \subsection{Hardware Platforms}
 \label{sec:setup:hardware_platforms}
