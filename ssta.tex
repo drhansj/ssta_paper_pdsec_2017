@@ -354,7 +354,8 @@ There are few approaches that are designed to \textbf{simultaneously solve}
 Suppose we have a \(nk \times nk\) \textbf{diagonally-dominant} tridiagonal
   matrix \(A\) and two \(nk\) element vectors \(u^{s}\) and \(u^{s+1}\). 
   We wish to solve \(Au^{s+1} = u^{s}\) for \(u^{s+1}\):
-\[
+\begin{equation}
+\label{eq:tridiag_system}
 \begin{bmatrix}
 b_0 & c_0 &     &          & 0        \\
 a_1 & b_1 & c_1 &          &          \\
@@ -377,7 +378,7 @@ u^{s}_1     \\
 ...     \\
 u^{s}_{n-1}
 \end{bmatrix}
-\]
+\end{equation}
 Our matrix \(A\) is stored as a set of three vectors: an \(nk-1\) element
   sub-diagonal vector \(a\), an \(nk\) element diagonal vector \(b\) and an
   \(nk-1\) element super-diagonal vector \(c\).
@@ -424,7 +425,7 @@ We can use a simplified form of Gaussian elimination that does not require
   pivoting, known as the Thomas algorithm or the tridiagonal matrix algorithm
 %  (TDMA)~\cite{elem_numerical_analysis_conte,numerical_math_quarteroni}, to
   (TDMA)~\cite{elem_numerical_analysis_conte}, to
-  solve the type of system described in the previous section.
+  solve the type of system described by eq. \ref{eq:tridiag_system} above.
 The Thomas algorithm takes advantage of sparsity to be \(O(nk)\) in time, 
   and can be extended to banded matrices and LU factorizations.
 It is also a significant improvement over dense Gaussian elimination,
@@ -776,7 +777,7 @@ For example, suppose we partition an \(ijk\)-layout grid into four tiles each
   containing \((d^2/4)(e)\) elements, with the tile-\(ij\) scheme producing
   \(d/2 \times d/2 \times e\) tiles
   (Figure~\ref{fig:impl:tiling:ijk_tile_ij_scheme})
-  and the tile-\(i\) scheme producing
+  and the tile-\(j\) scheme producing
   \(d \times d/4 \times e\) tiles
   (Figure~\ref{fig:impl:tiling:ijk_tile_j_scheme}).
 For the tile-\(ij\) scheme, tiles contain \((d/2)(e)\) contiguous
@@ -868,12 +869,12 @@ Our two Intel Xeon platforms, Edison and Cori Phase 1, are homogeneous Cray
   supercomputers, consisting of traditional dual-socket x86-64
   nodes~\cite{nersc_systems}.
 Edison features Intel Xeon E5-2695 v2 Ivy Bridge
-  (IVB) processors~\cite{intel_ark_xeon_e5_2695_v2}, and Cori Phase 1 has Intel
+  (IVB) processors~\cite{intel_ark_xeon_e5_2695_v2}; Cori Phase 1 has Intel
   Xeon E5-2698 v3 Haswell (HSW) processors~\cite{intel_ark_xeon_e5_2698_v3}.
-In general, the two Xeon platforms have a very similar performance profile for
+Both Xeon platforms have a very similar performance profile for
   our application.
 Commensurate with MPI parallelization for distributed memory, in all experiments
-  we restricted ourselves to a single NUMA nodel
+  we restricted ourselves to a single NUMA node.
 %As cluster-on-die (COD) is not enabled on our Xeon Phi platform, one NUMA node
 %  corresponds to a single socket on each of our test systems.
 
@@ -1344,9 +1345,9 @@ We can draw the conclusion that, for the platforms surveyed, the optimal total
 
 % Prediction 2.4: Performance drops as total tile size crosses cache capacity
 % boundaries, excluding L1D.
-The total tile size parameter sweep somewhat supports our prediction that we
-  would see drops in performance as we moved from tile sizes that would
-  fit into a particular cache to tile sizes that would not.
+The total tile size parameter sweep mostly supports our prediction, that 
+  performance drops from tile sizes that 
+  fit into a particular cache to tile sizes that do not.
 We see no such decrease at the L2 capacity boundary on the Xeon platforms, but
   we do see a drop when the tile size exceeds L3 capacity per core.
 On Knight's Landing, we do see a drop as we cross the L2 capacity boundary.
@@ -1385,9 +1386,24 @@ Our algorithm is a substantial improvement over the MKL-based \(kji\)-layout
 
 \section{Future Work}
 \label{sec:future}
+There are also a number of related numerical problems which we believe could be
+  addressed by some of the techniques we describe in this paper.
+In general, this we have traded the simplicity of ``solving'' one column
+  at a time, with the more complex approach of multiple columns 
+  but with optimized vectorization and memory access.
+As mentioned in the introduction, this trade-off may be valuable for
+  discretizations that are not naturally of vector-length size.
+Opportunities to extend the algorithm to wider banded or other 
+  block-sparse matrices, and LU-type factorizations;
+  most of these are straight-forward for diagonally-dominant cases, but
+  pivoting has the potential to hinder vectorization and memory 
+  access patterns (requiring branching and masking operations, for example).
+The algorithm needs to be extended to include matrix assembly
+  based on solution values, and put inside a fully non-linear iteration
+  with a Jacobian calculation, such as those used in Newton iterations.
+The challenge here is that some vertical columns may converge faster than
+  others, and vector masks or scalar iterative refinement may be required.
 
-There are a number of optimizations which we developed for the SSTA
-  solver but have not presented here. 
 %We developed two optimizations which reduced the number of floating point
 %  divisions and/or reciprocal estimates that are performed by the SSTA solver. 
 %The first, the \textbf{cached-divide} optimization, reformulates the Thomas 
@@ -1407,11 +1423,14 @@ There are a number of optimizations which we developed for the SSTA
 %While we found both optimizations to be beneficial in serial, they decreased
 %  performance if combined together and had little impact in parallel.
 
+There are also a number of optimizations which we developed for the SSTA
+  solver but have not presented here. 
+
 The version of the TSB suite described in this paper uses what we refer to as
   the ``full-grid'' scheme, where the tridiagonal matrix is built and stored
   for all vertical columns.
 The alternative ``rolling-grid'' scheme builds the matrix on the fly with
-  a tile-sized \(a\), \(b\) and \(c\).
+  a tile-sized \(a\), \(b\) and \(c\) (or more diagonals).
 In addition to offering storage savings, we believe the rolling-grid scheme
   will further improve data locality and hardware prefetching performance as the
   storage for the matrix will be reused for all tiles that a processing
@@ -1436,18 +1455,6 @@ We would like to extend the range of hardware platforms and configurations in
 On Knight's Landing, further effort is needed to study the trade-off between
   utilizing MCDRAM as a cache versus programmable memory.
 We are also interested in testing SSTA on GPGPU architectures.
-
-There are also a number of related numerical problems which we believe could be
-  addressed by some of the techniques we describe in this paper.
-The algorithm needs to be extended to include matrix assembly
-  based on solution values, and put inside a fully non-linear iteration
-  with a Jacobian calculation, such as those used in Newton iterations.
-The challenge here is that some vertical columns may converge faster than
-  others, and vector masks or scalar iterative refinement may be required.
-Opportunities to extend the algorithm to banded or other sparse matrices, 
-  and incomplete LU-type 
-  algorithms are straight-forward for diagonally-dominant cases, but
-  pivoting has the potential to hinder vectorization and memory access patterns.
 
 Finally, more complex multi-kernel applications integrate multiple solvers and
   computationally phases, such as traditional finite difference
