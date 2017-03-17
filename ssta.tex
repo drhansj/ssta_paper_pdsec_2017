@@ -190,7 +190,7 @@ xleftmargin=0.1cm,
 \author{\IEEEauthorblockN{Bryce Adelstein Lelbach, Hans Johansen, and Samuel Williams}
 \IEEEauthorblockA{Lawrence Berkeley National Laboratory, Computational Research Division\\
 Berkeley, CA, USA \\
-\{balelbach, hjohansen, swwilliams\}@lbl.gov\\
+brycelelbach@gmail.com, \{hjohansen, swwilliams\}@lbl.gov\\
 %{\small Revision \gitAbbrevHash \gitReferences, Built at \currenttime \vspace{1ex} on \today}
 }}
 
@@ -1354,9 +1354,9 @@ We can draw the conclusion that, for the platforms surveyed, the optimal total
 
 % Prediction 2.4: Performance drops as total tile size crosses cache capacity
 % boundaries, excluding L1D.
-The total tile size parameter sweep mostly supports our prediction, that 
-  performance drops from tile sizes that 
-  fit into a particular cache to tile sizes that do not.
+The total tile size parameter sweep mostly supports our prediction that 
+  performance drops from tile sizes that fit into a particular cache to tile
+  sizes that do not.
 We see no such decrease at the L2 capacity boundary on the Xeon platforms, but
   we do see a drop when the tile size exceeds L3 capacity per core.
 On Knight's Landing, we do see a drop as we cross the L2 capacity boundary.
@@ -1395,24 +1395,9 @@ Our algorithm is a substantial improvement over the MKL-based \(kji\)-layout
 
 \section{Future Work}
 \label{sec:future}
-There are also a number of related numerical problems which we believe could be
-  addressed by some of the techniques we describe in this paper.
-In general, this we have traded the simplicity of ``solving'' one column
-  at a time, with the more complex approach of multiple columns 
-  but with optimized vectorization and memory access.
-As mentioned in the introduction, this trade-off may be valuable for
-  discretizations that are not naturally of vector-length size.
-Opportunities to extend the algorithm to wider banded or other 
-  block-sparse matrices, and LU-type factorizations;
-  most of these are straight-forward for diagonally-dominant cases, but
-  pivoting has the potential to hinder vectorization and memory 
-  access patterns (requiring branching and masking operations, for example).
-The algorithm needs to be extended to include matrix assembly
-  based on solution values, and put inside a fully non-linear iteration
-  with a Jacobian calculation, such as those used in Newton iterations.
-The challenge here is that some vertical columns may converge faster than
-  others, and vector masks or scalar iterative refinement may be required.
 
+There are also a number of optimizations which we developed for the SSTA
+  solver but have not presented here. 
 %We developed two optimizations which reduced the number of floating point
 %  divisions and/or reciprocal estimates that are performed by the SSTA solver. 
 %The first, the \textbf{cached-divide} optimization, reformulates the Thomas 
@@ -1432,14 +1417,11 @@ The challenge here is that some vertical columns may converge faster than
 %While we found both optimizations to be beneficial in serial, they decreased
 %  performance if combined together and had little impact in parallel.
 
-There are also a number of optimizations which we developed for the SSTA
-  solver but have not presented here. 
-
 The version of the TSB suite described in this paper uses what we refer to as
   the ``full-grid'' scheme, where the tridiagonal matrix is built and stored
   for all vertical columns.
 The alternative ``rolling-grid'' scheme builds the matrix on the fly with
-  a tile-sized \(a\), \(b\) and \(c\) (or more diagonals).
+  a tile-sized \(a\), \(b\) and \(c\).
 In addition to offering storage savings, we believe the rolling-grid scheme
   will further improve data locality and hardware prefetching performance as the
   storage for the matrix will be reused for all tiles that a processing
@@ -1464,6 +1446,18 @@ We would like to extend the range of hardware platforms and configurations in
 On Knight's Landing, further effort is needed to study the trade-off between
   utilizing MCDRAM as a cache versus programmable memory.
 We are also interested in testing SSTA on GPGPU architectures.
+
+There are also a number of related numerical problems which we believe could be
+  addressed by some of the techniques we describe in this paper.
+The algorithm needs to be extended to include matrix assembly
+  based on solution values, and put inside a fully non-linear iteration
+  with a Jacobian calculation, such as those used in Newton iterations.
+The challenge here is that some vertical columns may converge faster than
+  others, and vector masks or scalar iterative refinement may be required.
+Opportunities to extend the algorithm to banded or other sparse matrices, 
+  and incomplete LU-type 
+  algorithms are straight-forward for diagonally-dominant cases, but
+  pivoting has the potential to hinder vectorization and memory access patterns.
 
 Finally, more complex multi-kernel applications integrate multiple solvers and
   computationally phases, such as traditional finite difference
