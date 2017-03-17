@@ -1,5 +1,8 @@
 \documentclass[10pt, conference, compsocconf]{IEEEtran}
 
+% ACM-style
+%\documentclass{sig-alternate}
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Hacks to revert the changes IEEEtran makes to table caption styles
@@ -189,7 +192,6 @@ xleftmargin=0.1cm,
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \author{\IEEEauthorblockN{Bryce Adelstein Lelbach, Hans Johansen, and Samuel Williams}
 \IEEEauthorblockA{Lawrence Berkeley National Laboratory, Computational Research Division\\
-Berkeley, CA, USA \\
 brycelelbach@gmail.com, \{hjohansen, swwilliams\}@lbl.gov\\
 %{\small Revision \gitAbbrevHash \gitReferences, Built at \currenttime \vspace{1ex} on \today}
 }}
@@ -233,10 +235,6 @@ Finally, we show that our solver improves on existing approaches and achieves
   \textapprox 90\% of STREAM Triad effective bandwidth on all three target
   platforms. 
 \end{abstract}
-
-\begin{IEEEkeywords}
-TODO
-\end{IEEEkeywords}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Introduction}
@@ -421,7 +419,6 @@ Our matrix \(A\) is stored as a set of three vectors: an \(nk-1\) element
   \label{fig:impl:batching:sim_strat}
   %\vspace{1em}
   \includegraphics[width=0.95\textwidth]{figures/batching/simultaneous_solve_diagram.pdf}
-  \vspace{-4mm}
 \end{figure*}
 
 We can use a simplified form of Gaussian elimination that does not require
@@ -651,7 +648,6 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
       \label{fig:impl:tiling:ikj_tile_j_scheme}
     }
   \end{minipage}
-  \vspace{-6mm}
 \end{figure*}
 
 \begin{table}[h]
@@ -688,7 +684,6 @@ We have investigated three different schemes: \(kji\), \(ijk\) and \(kji\)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \end{tabular}
 \label{tab:impl:layout:types}
-  \vspace{-2mm}
 \end{table}
 
 The production code that our MKL baseline solver is derived from uses the
@@ -1045,7 +1040,6 @@ Removing this source of systemic error would be straightforward, but
       \label{fig:results:bw_vs_tile_size_hsw}
     }
   \end{minipage}
-  \vspace{-8mm}
 \end{figure*}
 
 \begin{figure}[!h]
@@ -1072,7 +1066,6 @@ Removing this source of systemic error would be straightforward, but
   }
   \label{fig:results:bw_vs_tile_size_knl}
   \includegraphics[width=0.95\columnwidth]{figures/results/effective_bandwidth_vs_total_tile_size_carl_knl_7210_1socket_graph.pdf}
-  \vspace{-6mm}
 \end{figure}
 
 \begin{figure}[!h]
@@ -1092,7 +1085,6 @@ Removing this source of systemic error would be straightforward, but
   }
   \label{fig:results:percent_stream_bw}
   \includegraphics[width=0.95\columnwidth]{figures/results/percentage_of_stream_bw_attained_histogram.pdf}
-  \vspace{-6mm}
 \end{figure}
 
 % Hypothesis 1.1: SSTA can outperform legacy solver
@@ -1273,7 +1265,6 @@ We have not determined if switching to the tile-\(ij\) scheme might make
     SSTA \(ikj\)-layout &  32KB &  \(370 \pm 6\) GB/s &\(90 \pm 2\) \%     & \textapprox \(12x\)         \\ \hline
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   \end{tabular}
-  \vspace{-2mm}
 \end{table*}
 
 
