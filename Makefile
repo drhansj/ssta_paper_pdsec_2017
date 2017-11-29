@@ -9,10 +9,10 @@ PAPER  = ssta
 PDFTEX = pdflatex
 
 pdf:
-	-$(PDFTEX) --interaction=batchmode $(PAPER)
+	$(PDFTEX) $(PAPER).tex
 	bibtex $(PAPER)
-	-$(PDFTEX) --interaction=batchmode $(PAPER)
-	$(PDFTEX) $(PAPER)
+	$(PDFTEX) $(PAPER).tex
+	$(PDFTEX) $(PAPER).tex
 	gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dPDFSETTINGS=/prepress -dEmbedAllFonts=true -dNOPLATFONTS -sOutputFile=$(PAPER).embed.pdf -f $(PAPER).pdf
 	/bin/rm -f $(PAPER).pdf
 	mv $(PAPER).embed.pdf $(PAPER).pdf
